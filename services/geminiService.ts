@@ -1,117 +1,169 @@
 import { GoogleGenAI } from "@google/genai";
-import { Transaction, Budget, User } from '../types';
+import { Transaction, User } from "../types";
 
-// Ensure API Key is available
-const apiKey = process.env.API_KEY || '';
-const ai = new GoogleGenAI({ apiKey });
+// Vite: chỉ đọc biến env qua import.meta.env với prefix VITE_
+const apiKey = (import.meta as any).env?.VITE_GEMINI_API_KEY as string | undefined;
 
-const MODEL_NAME = 'gemini-3-flash-preview';
+// Nên dùng model ổn định cho nội bộ (preview dễ đổi hành vi)
+const MODEL_NAME = "gemini-2.5-flash";
+
+// Khởi tạo AI client chỉ khi có key
+const ai = apiKey ? new GoogleGenAI({ apiKey }) : null;
+
+function safeText(input: unknown): string {
+  if (typeof input !== "string") return "";
+  return input.replace(/\s+/g, " ").trim();
+}
 
 export const GeminiService = {
-  // Checks if we can use AI
-  isAvailable: () => !!apiKey,
+  isAvailable: () => !!apiKey && !!ai,
 
-  generateWeeklyInsight: async (transactions: Transaction[], users: User[]): Promise<string> => {
-    if (!apiKey) return "AI Insights unavailable (Missing API Key).";
+  generateWeeklyInsight: async (
+    transactions: Transaction[],
+    users: User[]
+  ): Promise<string> => {
+    if (!ai) return "AI tạm im lặng (thiếu API key).";
+
+    // An toàn: nếu chưa đủ 2 user thì vẫn chạy
+    const name1 = users?.[0]?.name ?? "Người 1";
+    const name2 = users?.[1]?.name ?? "Người 2";
 
     const recentTx = transactions.slice(-15);
-    const txString = recentTx.map(t => `${t.date}: $${t.amount} on ${t.category} (${t.description})`).join('\n');
+
+    // Đưa dữ liệu ngắn gọn, tránh quá dài
+    const txString = recentTx
+      .map((t) => {
+        const desc = safeText((t as any).description);
+        const line = `${t.date}: ${t.amount} - ${t.category}${desc ? ` (${desc})` : ""}`;
+        return line;
+      })
+      .join("\n");
 
     const prompt = `
-      Analyze these recent financial transactions for a couple named ${users[0].name} and ${users[1].name}.
-      Transactions:
-      ${txString}
+Bạn là trợ lý phản tư tài chính cho ứng dụng quản lý chi tiêu của hai vợ chồng.
 
-      Act as a financial reflection assistant.
-      Role: Observer and mirror. Not a teacher. Not a cheerleader. Not a judge.
-      Tone: Mature, calm, witty, slightly sarcastic, respectful.
-      
-      Strict Rules:
-      1. Maximum 2 sentences.
-      2. NO advice.
-      3. NO questions.
-      4. NO emojis.
-      5. NO exclamation marks.
-      6. NO cliches like "keep trying" or "you can do it".
-      7. Focus on reflecting behavior honestly.
-    `;
+Bối cảnh: cặp đôi tên ${name1} và ${name2}.
+Giao dịch gần đây (mới nhất ở cuối):
+${txString}
+
+Vai trò: quan sát và phản chiếu hành vi. Không dạy đời. Không cổ vũ sáo rỗng. Không phán xét.
+Giọng điệu: trưởng thành, điềm tĩnh, hơi mỉa nhẹ, tôn trọng.
+
+Quy tắc bắt buộc:
+- Tối đa 2 câu.
+- Không đưa lời khuyên.
+- Không đặt câu hỏi.
+- Không emoji.
+- Không dấu chấm than.
+- Tránh câu sáo rỗng kiểu “cố lên”, “bạn làm được”.
+- Ưu tiên nhận xét về nhịp chi tiêu và xu hướng (ổn/ lệch/ căng).
+
+Chỉ trả về đúng nội dung 2 câu, không thêm tiêu đề.
+`.trim();
 
     try {
       const response = await ai.models.generateContent({
         model: MODEL_NAME,
         contents: prompt,
       });
-      return response.text || "Spending patterns noted.";
+
+      const text = safeText((response as any).text);
+      return text || "Tiền tuần này đi khá nhanh. Kế hoạch vẫn còn, nhưng đang bị thử.";
     } catch (e) {
-      console.error(e);
-      return "The AI is observing silently (Error).";
+      // Không log chi tiết nếu sợ lộ thông tin môi trường
+      return "AI đang quan sát trong im lặng (lỗi tạm thời).";
     }
   },
 
-  generateReflectionPrompt: async (overspentCategory: string, amountOver: number): Promise<string> => {
-    if (!apiKey) return `Overspending detected in ${overspentCategory}.`;
+  generateReflectionPrompt: async (
+    overspentCategory: string,
+    amountOver: number
+  ): Promise<string> => {
+    if (!ai) return `Ngân sách mục "${overspentCategory}" đang bị vượt.`;
 
     const prompt = `
-      The user just went $${amountOver} over budget in the '${overspentCategory}' category.
-      Generate a short reflection statement.
-      Tone: Mature, calm, slightly ironic.
-      Rules: Max 20 words. NO questions. NO emojis. NO exclamation marks. NO advice.
-    `;
+Người dùng vừa vượt ngân sách ở danh mục "${overspentCategory}" khoảng ${amountOver}.
+Hãy tạo 1 câu phản tư ngắn.
+
+Giọng: trưởng thành, điềm tĩnh, hơi mỉa nhẹ.
+Quy tắc: tối đa 20 từ. Không lời khuyên. Không câu hỏi. Không emoji. Không dấu chấm than.
+`.trim();
 
     try {
       const response = await ai.models.generateContent({
         model: MODEL_NAME,
         contents: prompt,
       });
-      return response.text || "That is a choice you made.";
-    } catch (e) {
-      return "That is a choice you made.";
+
+      const text = safeText((response as any).text);
+      return text || "Khoản này không sai. Chỉ là nó làm mục tiêu chậm lại.";
+    } catch {
+      return "Khoản này không sai. Chỉ là nó làm mục tiêu chậm lại.";
     }
   },
 
   generateTransactionComment: async (transaction: any): Promise<string> => {
-    if (!apiKey) return "";
+    if (!ai) return "";
+
+    const amount = transaction?.amount ?? "";
+    const category = transaction?.category ?? "một khoản";
+    const desc = safeText(transaction?.description);
 
     const prompt = `
-      The user just spent $${transaction.amount} on ${transaction.category} (${transaction.description}).
-      Generate a subtle, calm, slightly ironic, adult, one-sentence reflection. 
-      Rules: NO emojis. NO questions. NO exclamation marks. Max 15 words.
-    `;
+Người dùng vừa ghi nhận một giao dịch chi tiêu: ${amount} cho "${category}"${desc ? ` (${desc})` : ""}.
+Hãy tạo 1 câu phản hồi ngắn sau khi lưu giao dịch.
+
+Giọng: trưởng thành, điềm tĩnh, hơi mỉa nhẹ.
+Quy tắc: 1 câu, tối đa 15 từ. Không emoji. Không câu hỏi. Không dấu chấm than. Không lời khuyên.
+`.trim();
 
     try {
       const response = await ai.models.generateContent({
         model: MODEL_NAME,
         contents: prompt,
       });
-      return response.text || "";
-    } catch (e) {
+
+      return safeText((response as any).text);
+    } catch {
       return "";
     }
   },
 
-  generateBadge: async (transactions: Transaction[]): Promise<{title: string, description: string}> => {
-     if (!apiKey) return { title: 'Budget Novice', description: 'Tracking has begun.' };
+  generateBadge: async (
+    transactions: Transaction[]
+  ): Promise<{ title: string; description: string }> => {
+    if (!ai) return { title: "Người mới ghi chép", description: "Ít nhất bạn đã bắt đầu." };
 
-     // Simple heuristic for demo
-     const prompt = `
-        Based on these transactions: ${JSON.stringify(transactions.slice(-10))}
-        Invent a creative, sarcastic achievement badge title and short description (max 10 words).
-        Tone: Dry humor.
-        Rules: NO emojis. NO exclamation marks.
-        Example: "Latte Legend: Funded the local cafe renovation."
-        Return JSON format: { "title": "...", "description": "..." }
-     `;
+    const sample = transactions.slice(-10);
 
-      try {
-        const response = await ai.models.generateContent({
-            model: MODEL_NAME,
-            contents: prompt,
-            config: { responseMimeType: 'application/json' }
-        });
-        const text = response.text;
-        return JSON.parse(text || '{}');
-      } catch (e) {
-        return { title: 'Mystery Spender', description: 'Money moves in mysterious ways.' };
-      }
-  }
+    const prompt = `
+Dựa trên 10 giao dịch gần nhất sau (JSON): ${JSON.stringify(sample)}
+Hãy tạo 1 huy hiệu thành tích (tên + mô tả ngắn).
+
+Yêu cầu:
+- Giọng: hài mỉa nhẹ, kiểu “khô”, trưởng thành.
+- Không emoji. Không dấu chấm than.
+- title: tối đa 5 từ.
+- description: tối đa 10 từ.
+Trả về đúng JSON dạng: {"title":"...","description":"..."}
+`.trim();
+
+    try {
+      const response = await ai.models.generateContent({
+        model: MODEL_NAME,
+        contents: prompt,
+        config: { responseMimeType: "application/json" },
+      });
+
+      const text = safeText((response as any).text);
+      const obj = JSON.parse(text || "{}");
+
+      // Fallback an toàn
+      const title = safeText(obj.title) || "Bậc thầy chi tiêu";
+      const description = safeText(obj.description) || "Tiền đi nhanh, bạn vẫn bình tĩnh.";
+      return { title, description };
+    } catch {
+      return { title: "Người tiêu bí ẩn", description: "Tiền đi đâu, ai cũng tò mò." };
+    }
+  },
 };
