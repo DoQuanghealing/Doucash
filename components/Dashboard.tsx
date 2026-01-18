@@ -1,18 +1,24 @@
 import React from 'react';
 import { Wallet, Transaction, TransactionType } from '../types';
-import { ArrowUpRight, ArrowDownRight, RefreshCw, Wallet as WalletIcon } from 'lucide-react';
+import {
+  ArrowUpRight,
+  ArrowDownRight,
+  RefreshCw,
+  Wallet as WalletIcon,
+  Settings as SettingsIcon,
+} from 'lucide-react';
 import { CATEGORY_COLORS, formatVnd } from '../constants';
 import { VI } from '../constants/vi';
 
 interface Props {
   wallets: Wallet[];
   transactions: Transaction[];
+  onOpenSettings?: () => void;
 }
 
-export const Dashboard: React.FC<Props> = ({ wallets, transactions }) => {
+export const Dashboard: React.FC<Props> = ({ wallets, transactions, onOpenSettings }) => {
   const totalBalance = wallets.reduce((acc, w) => acc + w.balance, 0);
 
-  // Simple aggregation for chart (mocked here, in real app use Recharts)
   const recentTransactions = transactions
     .sort((a, b) => b.timestamp - a.timestamp)
     .slice(0, 5);
@@ -22,9 +28,27 @@ export const Dashboard: React.FC<Props> = ({ wallets, transactions }) => {
 
       {/* Header / Net Worth */}
       <div className="space-y-1 px-1">
-        <h1 className="text-zinc-400 text-sm font-medium tracking-wide uppercase">{VI.dashboard.netWorth}</h1>
+        <div className="flex items-center justify-between">
+          <h1 className="text-zinc-400 text-sm font-medium tracking-wide uppercase">
+            {VI.dashboard.netWorth}
+          </h1>
+
+          <button
+            onClick={onOpenSettings}
+            className="w-9 h-9 rounded-full bg-white/5 hover:bg-white/10 flex items-center justify-center"
+            aria-label="Settings"
+            type="button"
+            disabled={!onOpenSettings}
+            title="Cài đặt"
+          >
+            <SettingsIcon size={18} className={`${onOpenSettings ? 'text-zinc-200' : 'text-zinc-600'}`} />
+          </button>
+        </div>
+
         <div className="flex items-baseline space-x-1">
-          <span className="text-4xl font-bold text-white tracking-tight">{formatVnd(totalBalance)}</span>
+          <span className="text-4xl font-bold text-white tracking-tight">
+            {formatVnd(totalBalance)}
+          </span>
           <span className="text-emerald-500 text-sm font-medium">▲ 2.4%</span>
         </div>
       </div>
