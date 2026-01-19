@@ -141,13 +141,13 @@ export const Dashboard: React.FC<Props> = ({ wallets, transactions, users, onOpe
                 onClick={() => setActiveWalletTab('main')}
                 className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all flex items-center justify-center gap-2 ${activeWalletTab === 'main' ? 'bg-surfaceHighlight text-white shadow' : 'text-zinc-500'}`}
               >
-                  <WalletIcon size={16} /> {VI.dashboard.tabs.main}
+                  <WalletIcon size={16} /> {mainWallet?.name || VI.dashboard.tabs.main}
               </button>
               <button 
                 onClick={() => setActiveWalletTab('backup')}
                 className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all flex items-center justify-center gap-2 ${activeWalletTab === 'backup' ? 'bg-surfaceHighlight text-emerald-400 shadow' : 'text-zinc-500'}`}
               >
-                  <ShieldCheck size={16} /> {VI.dashboard.tabs.backup}
+                  <ShieldCheck size={16} /> {backupWallet?.name || VI.dashboard.tabs.backup}
               </button>
           </div>
 

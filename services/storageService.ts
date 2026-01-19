@@ -183,6 +183,10 @@ export const StorageService = {
     return data ? JSON.parse(data) : [];
   },
 
+  updateWallets: (wallets: Wallet[]) => {
+    localStorage.setItem(KEYS.WALLETS, JSON.stringify(wallets));
+  },
+
   getGoals: (): Goal[] => {
     const data = localStorage.getItem(KEYS.GOALS);
     return data ? JSON.parse(data) : [];

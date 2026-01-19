@@ -1,36 +1,65 @@
 import React, { useState, useEffect } from 'react';
-import { User } from '../types';
+import { User, Wallet } from '../types';
 import { VI } from '../constants/vi';
-import { X, ShieldCheck } from 'lucide-react';
+import { X, ShieldCheck, Wallet as WalletIcon } from 'lucide-react';
 import { StorageService } from '../services/storageService';
 
 interface Props {
   isOpen: boolean;
   onClose: () => void;
   users: User[];
-  onSave: (updatedUsers: User[]) => void;
+  wallets: Wallet[];
+  onSave: (updatedUsers: User[], updatedWallets: Wallet[]) => void;
 }
 
-export const SettingsModal: React.FC<Props> = ({ isOpen, onClose, users, onSave }) => {
+export const SettingsModal: React.FC<Props> = ({ isOpen, onClose, users, wallets, onSave }) => {
   const [userName, setUserName] = useState('');
+  const [mainWalletName, setMainWalletName] = useState('');
+  const [backupWalletName, setBackupWalletName] = useState('');
 
   useEffect(() => {
     if (isOpen) {
       if (users.length > 0) setUserName(users[0].name);
+      
+      const w1 = wallets.find(w => w.id === 'w1') || wallets[0];
+      const w2 = wallets.find(w => w.id === 'w2') || wallets[1];
+      
+      if (w1) setMainWalletName(w1.name);
+      if (w2) setBackupWalletName(w2.name);
     }
-  }, [isOpen, users]);
+  }, [isOpen, users, wallets]);
 
   if (!isOpen) return null;
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Save User Name
+    // Prepare Updated Users
+    const updatedUsers = [...users];
     if (userName.trim()) {
-       const updatedUsers = [...users];
        updatedUsers[0] = { ...updatedUsers[0], name: userName.trim() };
-       onSave(updatedUsers);
     }
+
+    // Prepare Updated Wallets
+    const updatedWallets = [...wallets];
+    
+    // Update Main Wallet
+    const w1Index = updatedWallets.findIndex(w => w.id === 'w1');
+    if (w1Index !== -1 && mainWalletName.trim()) {
+        updatedWallets[w1Index] = { ...updatedWallets[w1Index], name: mainWalletName.trim() };
+    } else if (wallets.length > 0 && mainWalletName.trim()) {
+        updatedWallets[0] = { ...updatedWallets[0], name: mainWalletName.trim() };
+    }
+
+    // Update Backup Wallet
+    const w2Index = updatedWallets.findIndex(w => w.id === 'w2');
+    if (w2Index !== -1 && backupWalletName.trim()) {
+        updatedWallets[w2Index] = { ...updatedWallets[w2Index], name: backupWalletName.trim() };
+    } else if (wallets.length > 1 && backupWalletName.trim()) {
+        updatedWallets[1] = { ...updatedWallets[1], name: backupWalletName.trim() };
+    }
+
+    onSave(updatedUsers, updatedWallets);
     onClose();
   };
 
@@ -58,6 +87,44 @@ export const SettingsModal: React.FC<Props> = ({ isOpen, onClose, users, onSave 
                     onChange={(e) => setUserName(e.target.value)}
                 />
             </div>
+          </div>
+
+          <div className="border-t border-white/5 pt-4">
+              <h3 className="text-sm font-bold text-zinc-400 mb-4">Cấu hình Ví</h3>
+              
+              <div className="space-y-4">
+                  {/* Main Wallet Name */}
+                  <div className="space-y-1">
+                    <label className="text-xs text-zinc-500 ml-1">{VI.settings.walletMain}</label>
+                    <div className="flex items-center space-x-2">
+                        <div className="p-2 rounded-lg bg-black/30 text-primary">
+                            <WalletIcon size={18} />
+                        </div>
+                        <input
+                            type="text"
+                            className="w-full bg-black/20 text-white p-3 rounded-xl border border-white/10 focus:border-primary focus:outline-none"
+                            value={mainWalletName}
+                            onChange={(e) => setMainWalletName(e.target.value)}
+                        />
+                    </div>
+                  </div>
+
+                  {/* Backup Wallet Name */}
+                  <div className="space-y-1">
+                    <label className="text-xs text-zinc-500 ml-1">{VI.settings.walletBackup}</label>
+                    <div className="flex items-center space-x-2">
+                        <div className="p-2 rounded-lg bg-emerald-500/20 text-emerald-400">
+                            <ShieldCheck size={18} />
+                        </div>
+                        <input
+                            type="text"
+                            className="w-full bg-black/20 text-white p-3 rounded-xl border border-white/10 focus:border-emerald-500 focus:outline-none"
+                            value={backupWalletName}
+                            onChange={(e) => setBackupWalletName(e.target.value)}
+                        />
+                    </div>
+                  </div>
+              </div>
           </div>
 
           <div className="pt-2">

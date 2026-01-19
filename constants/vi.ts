@@ -63,6 +63,8 @@ export const VI = {
     editNames: "Hồ sơ cá nhân",
     user1: "Tên hiển thị",
     user2: "Người thứ 2", // Legacy, not used in UI
+    walletMain: "Tên Ví chính",
+    walletBackup: "Tên Quỹ dự phòng",
     save: "Lưu cấu hình",
     cancel: "Hủy",
     autoDeduct: {
