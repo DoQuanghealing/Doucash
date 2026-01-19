@@ -89,6 +89,15 @@ export const StorageService = {
     }
   },
 
+  resetData: () => {
+    // Clear all keys managed by this app
+    Object.values(KEYS).forEach(key => {
+        localStorage.removeItem(key);
+    });
+    // Re-initialize with defaults
+    StorageService.init();
+  },
+
   getUsers: (): User[] => {
     const data = localStorage.getItem(KEYS.USERS);
     return data ? JSON.parse(data) : INITIAL_USERS;

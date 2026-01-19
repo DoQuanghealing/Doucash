@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { User, Wallet } from '../types';
 import { VI } from '../constants/vi';
-import { X, ShieldCheck, Wallet as WalletIcon } from 'lucide-react';
+import { X, ShieldCheck, Wallet as WalletIcon, Trash2, AlertTriangle } from 'lucide-react';
 import { StorageService } from '../services/storageService';
 
 interface Props {
@@ -10,9 +10,10 @@ interface Props {
   users: User[];
   wallets: Wallet[];
   onSave: (updatedUsers: User[], updatedWallets: Wallet[]) => void;
+  onReset?: () => void;
 }
 
-export const SettingsModal: React.FC<Props> = ({ isOpen, onClose, users, wallets, onSave }) => {
+export const SettingsModal: React.FC<Props> = ({ isOpen, onClose, users, wallets, onSave, onReset }) => {
   const [userName, setUserName] = useState('');
   const [mainWalletName, setMainWalletName] = useState('');
   const [backupWalletName, setBackupWalletName] = useState('');
@@ -63,9 +64,16 @@ export const SettingsModal: React.FC<Props> = ({ isOpen, onClose, users, wallets
     onClose();
   };
 
+  const handleReset = () => {
+    if (confirm(VI.settings.resetConfirm)) {
+        if (onReset) onReset();
+        onClose();
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/80 backdrop-blur-md px-4 animate-in fade-in duration-200">
-      <div className="bg-surface w-full max-w-sm rounded-3xl p-6 border border-white/10 shadow-2xl animate-in zoom-in-95 duration-200">
+      <div className="bg-surface w-full max-w-sm rounded-3xl p-6 border border-white/10 shadow-2xl animate-in zoom-in-95 duration-200 overflow-y-auto max-h-[90vh]">
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-xl font-bold text-white">{VI.settings.title}</h2>
           <button onClick={onClose} className="p-2 bg-white/5 rounded-full hover:bg-white/10">
@@ -136,6 +144,22 @@ export const SettingsModal: React.FC<Props> = ({ isOpen, onClose, users, wallets
             </button>
           </div>
         </form>
+
+        {/* DANGER ZONE */}
+        <div className="mt-8 border-t border-white/5 pt-6">
+           <h3 className="text-sm font-bold text-red-500 mb-3 flex items-center">
+             <AlertTriangle size={16} className="mr-2" />
+             {VI.settings.dangerZone}
+           </h3>
+           <button 
+             type="button"
+             onClick={handleReset}
+             className="w-full border border-red-500/30 text-red-500 bg-red-500/5 hover:bg-red-500/10 font-medium py-3 rounded-xl transition-colors flex items-center justify-center"
+           >
+               <Trash2 size={18} className="mr-2" />
+               {VI.settings.resetData}
+           </button>
+        </div>
       </div>
     </div>
   );

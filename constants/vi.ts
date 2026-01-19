@@ -70,7 +70,10 @@ export const VI = {
     autoDeduct: {
         title: "Tự động trích quỹ",
         description: "Khi có thu nhập vào Ví chính, tự động chuyển một phần sang Quỹ dự phòng."
-    }
+    },
+    dangerZone: "Vùng nguy hiểm",
+    resetData: "Khôi phục dữ liệu gốc",
+    resetConfirm: "Bạn có chắc chắn muốn xóa TOÀN BỘ dữ liệu? Hành động này không thể hoàn tác."
   },
   budget: {
     title: "Quản lý Ngân sách",

@@ -48,6 +48,12 @@ function App() {
     StorageService.updateWallets(updatedWallets);
     refreshData();
   };
+
+  const handleResetData = () => {
+    StorageService.resetData();
+    refreshData();
+    // Force a small delay/reload if needed to clear states, but refreshData usually enough
+  };
   
   const handleUpdateBudgets = (newBudgets: Budget[]) => {
       StorageService.updateBudgets(newBudgets);
@@ -179,6 +185,7 @@ function App() {
         users={users}
         wallets={wallets}
         onSave={handleSaveSettings}
+        onReset={handleResetData}
       />
     </Layout>
   );
