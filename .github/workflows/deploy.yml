@@ -20,20 +20,19 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          # Không dùng cache ở đây vì bạn không có file package-lock.json
 
       - name: Install dependencies
-        # Dùng --legacy-peer-deps để tránh xung đột thư viện nếu có
+        # Nếu không có package-lock.json, lệnh này sẽ cài đặt dựa trên package.json
         run: npm install --legacy-peer-deps
 
       - name: Build project
-        # Thêm CI=false để quá trình build không bị dừng nếu có cảnh báo (warning)
+        # CI=false để bỏ qua các cảnh báo lặt vặt gây dừng build
         run: CI=false npm run build
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          # Đảm bảo đường dẫn này khớp với outDir trong vite.config.ts
+          # Phải khớp với outDir: 'dist' trong vite.config.ts
           path: ./dist
 
       - name: Deploy to GitHub Pages
