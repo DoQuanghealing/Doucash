@@ -1,7 +1,6 @@
 {
   "name": "duocash-future-finance",
   "version": "1.0.0",
-  "description": "Mobile-first personal finance app for couples with AI insights.",
   "type": "module",
   "scripts": {
     "dev": "vite",
