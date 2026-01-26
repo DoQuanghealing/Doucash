@@ -4,7 +4,7 @@ import { GeminiService } from '../services/geminiService';
 import { StorageService } from '../services/storageService';
 import { VI } from '../constants/vi';
 import { formatVND } from '../utils/format';
-import { Sparkles, Plus, Calendar, CheckSquare, Square, Trash2, ArrowRight, Wallet, CheckCircle, Save, TrendingUp, Activity, Target, Zap, BarChart2, AlertTriangle } from 'lucide-react';
+import { Sparkles, Plus, Calendar, CheckSquare, Square, Trash2, ArrowRight, Wallet, CheckCircle, Save, TrendingUp, Activity, Target, Zap, BarChart2, AlertTriangle, X, PartyPopper } from 'lucide-react';
 
 interface Props {
   transactions: Transaction[];
@@ -22,6 +22,7 @@ export const Insights: React.FC<Props> = ({ transactions, users }) => {
   // Modal States
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isAiModalOpen, setIsAiModalOpen] = useState(false);
+  const [celebrationProject, setCelebrationProject] = useState<string | null>(null);
   
   // AI State
   const [aiPrompt, setAiPrompt] = useState('');
@@ -41,8 +42,6 @@ export const Insights: React.FC<Props> = ({ transactions, users }) => {
   };
 
   const activeUser = users[0];
-
-  // Show all projects
   const userProjects = projects;
 
   const handleGenerateReport = async () => {
@@ -54,7 +53,6 @@ export const Insights: React.FC<Props> = ({ transactions, users }) => {
       setIsReportLoading(false);
   };
 
-  // --- CRUD Logic (Same as before) ---
   const handleOpenCreate = () => {
     setEditingProject({
         id: '',
@@ -83,55 +81,39 @@ export const Insights: React.FC<Props> = ({ transactions, users }) => {
   };
 
   const handleSaveProject = () => {
-      if (!editingProject.name?.trim()) {
-          alert("Vui lòng nhập tên Dự án / Công việc!");
-          return;
-      }
-      if (!editingProject.startDate) {
-          alert("Vui lòng chọn ngày bắt đầu!");
-          return;
-      }
-
+      if (!editingProject.name?.trim()) return;
       const projectToSave: IncomeProject = {
           id: editingProject.id || `p_${Date.now()}`,
           userId: editingProject.userId || activeUser.id,
           name: editingProject.name.trim(),
           description: editingProject.description || '',
           expectedIncome: Number(editingProject.expectedIncome) || 0,
-          startDate: editingProject.startDate,
+          startDate: editingProject.startDate || new Date().toISOString().split('T')[0],
           endDate: editingProject.endDate || '',
           status: editingProject.status || 'planning',
           milestones: editingProject.milestones || []
       };
-
-      if (editingProject.id) {
-          StorageService.updateIncomeProject(projectToSave);
-      } else {
-          StorageService.addIncomeProject(projectToSave);
-      }
+      if (editingProject.id) StorageService.updateIncomeProject(projectToSave);
+      else StorageService.addIncomeProject(projectToSave);
       loadProjects();
       setIsEditOpen(false);
   };
 
   const handleAddMilestone = () => {
       const newM: Milestone = {
-          id: `m_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          id: `m_${Date.now()}`,
           title: '',
+          startDate: new Date().toISOString().split('T')[0],
           date: '',
           isCompleted: false
       };
-      setEditingProject(prev => ({
-          ...prev,
-          milestones: [...(prev.milestones || []), newM]
-      }));
+      setEditingProject(prev => ({ ...prev, milestones: [...(prev.milestones || []), newM] }));
   };
 
   const updateMilestone = (index: number, field: keyof Milestone, value: any) => {
       setEditingProject(prev => {
           const ms = [...(prev.milestones || [])];
-          if (ms[index]) {
-            ms[index] = { ...ms[index], [field]: value };
-          }
+          if (ms[index]) ms[index] = { ...ms[index], [field]: value };
           return { ...prev, milestones: ms };
       });
   };
@@ -146,19 +128,36 @@ export const Insights: React.FC<Props> = ({ transactions, users }) => {
 
   const toggleMilestoneInView = (project: IncomeProject, mIndex: number) => {
       const updatedProject = { ...project };
-      updatedProject.milestones = project.milestones.map((m, idx) => 
-          idx === mIndex ? { ...m, isCompleted: !m.isCompleted } : m
-      );
+      const wasAllCompletedBefore = project.milestones.every(m => m.isCompleted);
       
-      const allDone = updatedProject.milestones.every(m => m.isCompleted);
-      if (allDone && updatedProject.status !== 'completed') {
+      updatedProject.milestones = project.milestones.map((m, idx) => {
+          if (idx === mIndex) {
+              const newStatus = !m.isCompleted;
+              return { 
+                ...m, 
+                isCompleted: newStatus,
+                completedAt: newStatus ? new Date().toISOString().split('T')[0] : undefined
+              };
+          }
+          return m;
+      });
+
+      const isAllCompletedNow = updatedProject.milestones.length > 0 && updatedProject.milestones.every(m => m.isCompleted);
+      
+      if (isAllCompletedNow) {
           updatedProject.status = 'completed';
-      } else if (!allDone && updatedProject.status === 'completed') {
+      } else if (updatedProject.milestones.some(m => m.isCompleted)) {
           updatedProject.status = 'in_progress';
+      } else {
+          updatedProject.status = 'planning';
       }
 
       StorageService.updateIncomeProject(updatedProject);
       loadProjects();
+
+      if (isAllCompletedNow && !wasAllCompletedBefore) {
+          setCelebrationProject(project.name);
+      }
   };
 
   const handleGeneratePlan = async () => {
@@ -166,69 +165,35 @@ export const Insights: React.FC<Props> = ({ transactions, users }) => {
       setIsGenerating(true);
       const plan = await GeminiService.generateIncomePlan(aiPrompt);
       setIsGenerating(false);
-
       if (plan) {
           setIsAiModalOpen(false);
-          const today = new Date();
-          
-          const newMilestones: Milestone[] = plan.milestones.map((m: any, idx: number) => {
-               const d = new Date(today);
-               d.setDate(d.getDate() + (m.daysFromNow || idx));
-               return {
-                   id: `m_ai_${Date.now()}_${idx}_${Math.random().toString(36).substr(2, 5)}`,
-                   title: m.title,
-                   date: d.toISOString().split('T')[0],
-                   isCompleted: false
-               };
-          });
-
           setEditingProject({
               id: '',
               userId: activeUser.id,
               name: plan.name,
               description: plan.description,
               expectedIncome: plan.expectedIncome,
-              startDate: today.toISOString().split('T')[0],
+              startDate: new Date().toISOString().split('T')[0],
               endDate: '',
               status: 'planning',
-              milestones: newMilestones
+              milestones: plan.milestones.map((m: any, idx: number) => ({
+                   id: `m_ai_${idx}_${Date.now()}`,
+                   title: m.title,
+                   startDate: new Date().toISOString().split('T')[0],
+                   date: '',
+                   isCompleted: false
+              }))
           });
           setIsEditOpen(true);
       }
   };
 
-  const handleCollectMoney = (project: IncomeProject) => {
-      const amount = project.expectedIncome;
-      if (amount <= 0) return;
-
-      const confirmMsg = `Hoàn thành dự án "${project.name}" và nạp ${formatVND(amount)} vào ví của ${activeUser?.name}?`;
-      if (confirm(confirmMsg)) {
-          const allWallets = StorageService.getWallets();
-          const targetWallet = allWallets.find(w => w.userId === project.userId) || allWallets[0];
-          
-          StorageService.addTransaction({
-              id: `tx_inc_${Date.now()}`,
-              date: new Date().toISOString(),
-              amount: amount,
-              type: TransactionType.INCOME,
-              category: Category.INCOME,
-              walletId: targetWallet.id,
-              description: `Thu nhập: ${project.name}`,
-              timestamp: Date.now()
-          });
-          
-          alert("Đã cộng tiền thành công! 🎉");
-          loadProjects();
-      }
-  };
-
   const renderPlanningTab = () => (
-      <>
+      <div className="space-y-6">
         {userProjects.length === 0 ? (
-            <div className="text-center py-10 text-zinc-500 bg-surface rounded-3xl border border-white/5 border-dashed">
-                <Calendar size={48} className="mx-auto mb-4 opacity-50" />
-                <p>Chưa có kế hoạch nào.</p>
-                <button onClick={handleOpenCreate} className="mt-4 text-primary font-bold">{VI.insights.createBtn}</button>
+            <div className="glass-card liquid-glass rounded-[3rem] p-16 text-center border-0 shadow-xl">
+                <Calendar size={48} className="mx-auto mb-6 text-foreground/10" />
+                <p className="text-foreground/30 font-black text-xs uppercase tracking-[0.2em]">{VI.insights.noProjects}</p>
             </div>
         ) : (
             <div className="space-y-4">
@@ -238,157 +203,130 @@ export const Insights: React.FC<Props> = ({ transactions, users }) => {
                     const progress = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
                     
                     return (
-                        <div key={project.id} className="bg-surface border border-white/10 rounded-3xl p-5 shadow-lg relative overflow-hidden animate-in slide-in-from-bottom-2 duration-300">
-                            <div className="flex justify-between items-start mb-2">
-                                <div>
-                                    <h3 className="text-lg font-bold text-white cursor-pointer hover:text-primary transition-colors" onClick={() => handleOpenEdit(project)}>
+                        <div key={project.id} className="glass-card liquid-glass rounded-[3rem] p-8 border-0 relative group shadow-2xl bg-gradient-to-br from-surface/80 to-background">
+                            <div className="flex justify-between items-start mb-6">
+                                <div className="max-w-[70%]">
+                                    <h3 className="text-xl font-[900] text-foreground uppercase tracking-tighter leading-tight cursor-pointer hover:text-primary transition-colors" onClick={() => handleOpenEdit(project)}>
                                         {project.name}
                                     </h3>
-                                    <p className="text-xs text-zinc-400">{project.description}</p>
+                                    <p className="text-[11px] font-bold text-foreground/40 mt-1 uppercase tracking-widest">{project.description}</p>
                                 </div>
                                 <div className="text-right">
-                                    <span className="text-emerald-400 font-bold block">{formatVND(project.expectedIncome)}</span>
-                                    <span className={`text-[10px] px-2 py-0.5 rounded-full uppercase font-bold ${project.status === 'completed' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-white/10 text-zinc-400'}`}>
+                                    <span className="text-secondary text-lg font-[900] block tracking-tighter">{formatVND(project.expectedIncome)}</span>
+                                    <span className={`text-[9px] px-3 py-1.5 rounded-full uppercase font-black mt-3 inline-block tracking-widest ${project.status === 'completed' ? 'bg-secondary text-white shadow-lg shadow-secondary/20' : 'bg-foreground/5 text-foreground/40'}`}>
                                         {VI.insights.project.status[project.status]}
                                     </span>
                                 </div>
                             </div>
 
-                            {/* Progress Bar */}
-                            <div className="h-2 w-full bg-black/40 rounded-full mt-3 mb-4 overflow-hidden">
-                                <div className="h-full bg-primary transition-all duration-500" style={{ width: `${progress}%` }}></div>
+                            <div className="h-2.5 w-full bg-foreground/5 rounded-full mb-8 overflow-hidden shadow-inner">
+                                <div className="h-full bg-gradient-to-r from-primary to-indigo-400 transition-all duration-700 neon-glow-primary" style={{ width: `${progress}%` }}></div>
                             </div>
 
-                            {/* Milestones Preview */}
-                            <div className="space-y-2">
+                            <div className="space-y-3">
                                 {project.milestones.map((m, idx) => (
-                                    <div key={m.id} className="flex items-center space-x-3 p-2 rounded-xl hover:bg-white/5 transition-colors">
-                                        <button onClick={() => toggleMilestoneInView(project, idx)}>
-                                            {m.isCompleted ? <CheckSquare size={20} className="text-primary" /> : <Square size={20} className="text-zinc-600" />}
-                                        </button>
-                                        <div className="flex-1">
-                                            <p className={`text-sm ${m.isCompleted ? 'text-zinc-500 line-through' : 'text-zinc-200'}`}>{m.title}</p>
+                                    <div key={m.id} className="flex flex-col p-4 glass-card bg-foreground/[0.03] rounded-[1.5rem] border-0 transition-all hover:bg-foreground/[0.06]">
+                                        <div className="flex items-center space-x-4">
+                                            <button onClick={() => toggleMilestoneInView(project, idx)} className={`w-7 h-7 rounded-xl flex items-center justify-center transition-all ${m.isCompleted ? 'bg-primary text-white shadow-lg shadow-primary/30' : 'border-2 border-foreground/10 text-transparent'}`}>
+                                                <CheckCircle size={16} strokeWidth={4} />
+                                            </button>
+                                            <div className="flex-1">
+                                                <p className={`text-[14px] font-[800] tracking-tight ${m.isCompleted ? 'text-foreground/30 line-through' : 'text-foreground/80'} uppercase`}>{m.title}</p>
+                                                <div className="flex items-center gap-3 mt-1">
+                                                    {m.startDate && <span className="text-[9px] font-black text-foreground/20 uppercase tracking-widest">Từ: {m.startDate}</span>}
+                                                    {m.date && <span className="text-[9px] font-black text-foreground/20 uppercase tracking-widest">Hạn: {m.date}</span>}
+                                                </div>
+                                            </div>
                                         </div>
+                                        {m.isCompleted && m.completedAt && (
+                                            <div className="mt-2 pl-11 flex items-center gap-2">
+                                                <div className="w-1 h-1 rounded-full bg-secondary"></div>
+                                                <span className="text-[9px] font-black text-secondary uppercase tracking-widest">Hoàn thành ngày: {m.completedAt}</span>
+                                            </div>
+                                        )}
                                     </div>
                                 ))}
                             </div>
 
-                            <div className="flex justify-between items-center mt-4 pt-4 border-t border-white/5">
-                                <button onClick={() => handleDelete(project.id)} className="text-zinc-600 hover:text-red-400 p-2">
-                                    <Trash2 size={18} />
+                            <div className="flex justify-between items-center mt-8 pt-6 border-t border-foreground/5">
+                                <button onClick={() => handleDelete(project.id)} className="p-3 text-foreground/10 hover:text-danger hover:bg-danger/5 rounded-2xl transition-all"><Trash2 size={22} /></button>
+                                <button onClick={() => handleOpenEdit(project)} className="text-[10px] font-black uppercase tracking-[0.3em] text-foreground/40 flex items-center hover:text-primary transition-colors bg-foreground/5 px-6 py-3 rounded-2xl">
+                                    CHI TIẾT <ArrowRight size={16} className="ml-2" />
                                 </button>
-                                {project.status === 'completed' ? (
-                                    <button onClick={() => handleCollectMoney(project)} className="flex items-center space-x-2 bg-emerald-500/20 text-emerald-400 px-4 py-2 rounded-xl font-bold hover:bg-emerald-500/30">
-                                        <Wallet size={16} /> <span>{VI.insights.project.collect}</span>
-                                    </button>
-                                ) : (
-                                    <button onClick={() => handleOpenEdit(project)} className="flex items-center space-x-2 text-zinc-400 hover:text-white px-2">
-                                        <span className="text-xs">Chi tiết</span> <ArrowRight size={14} />
-                                    </button>
-                                )}
                             </div>
                         </div>
                     );
                 })}
-                <button onClick={handleOpenCreate} className="w-full py-4 border border-dashed border-white/20 rounded-3xl text-zinc-400 hover:text-white hover:border-white/40 transition-colors flex items-center justify-center space-x-2">
-                    <Plus size={20} /> <span>{VI.insights.createBtn}</span>
-                </button>
             </div>
         )}
-      </>
+        <button onClick={handleOpenCreate} className="w-full py-8 glass-card bg-foreground/[0.02] rounded-[3rem] border-dashed border-foreground/20 text-foreground/30 font-black text-[11px] uppercase tracking-[0.3em] hover:bg-foreground/[0.05] transition-all border-2">
+            + THÊM KẾ HOẠCH MỚI
+        </button>
+      </div>
   );
 
   const renderReportTab = () => (
-      <div className="space-y-6">
+      <div className="space-y-8">
           {!report ? (
-              <div className="text-center py-10 bg-surface rounded-3xl border border-white/5">
-                  <div className="w-16 h-16 bg-gradient-to-br from-indigo-500 to-purple-500 rounded-full flex items-center justify-center mx-auto mb-4 animate-pulse">
-                      <Sparkles size={32} className="text-white" />
+              <div className="glass-card liquid-glass rounded-[3rem] p-16 text-center border-0 relative overflow-hidden shadow-2xl">
+                  <div className="absolute top-0 right-0 w-40 h-40 bg-primary/20 rounded-full blur-[80px] opacity-50"></div>
+                  <div className="w-24 h-24 bg-primary/10 text-primary rounded-[2.5rem] flex items-center justify-center mx-auto mb-10 neon-glow-primary">
+                      <Sparkles size={48} />
                   </div>
-                  <h3 className="text-lg font-bold text-white mb-2">AI Phân tích Toàn diện</h3>
-                  <p className="text-zinc-400 text-sm mb-6 max-w-[250px] mx-auto">
-                      Đánh giá sức khỏe tài chính, tốc độ hoàn thành dự án và khả năng đạt mục tiêu.
-                  </p>
+                  <h3 className="text-2xl font-[900] text-foreground tracking-tighter uppercase mb-6">Hệ Thống Phân Tích</h3>
+                  <p className="text-foreground/40 text-[14px] font-bold mb-12 max-w-[300px] mx-auto leading-relaxed uppercase tracking-tight">AI sẽ dựa trên dữ liệu thu chi để đánh giá sức khỏe tài chính và dự báo tương lai của bạn.</p>
                   <button 
                     onClick={handleGenerateReport}
                     disabled={isReportLoading}
-                    className="bg-white text-black font-bold py-3 px-8 rounded-full shadow-lg shadow-white/10 active:scale-95 transition-all"
+                    className="w-full bg-primary text-white font-[900] py-6 rounded-[2rem] text-[11px] uppercase tracking-[0.3em] shadow-2xl neon-glow-primary active:scale-95 transition-all"
                   >
-                      {isReportLoading ? VI.insights.report.generating : VI.insights.report.btnGenerate}
+                      {isReportLoading ? 'ĐANG ĐÁNH GIÁ...' : 'BẮT ĐẦU PHÂN TÍCH'}
                   </button>
               </div>
           ) : (
-              <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                  {/* Scorecard */}
-                  <div className="bg-gradient-to-br from-surfaceHighlight to-surface border border-white/5 rounded-3xl p-6 text-center relative overflow-hidden">
-                      <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/10 rounded-full blur-3xl -mr-10 -mt-10"></div>
-                      <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-widest mb-4">{VI.insights.report.healthScore}</h3>
-                      <div className="relative w-32 h-32 mx-auto flex items-center justify-center">
-                          {/* Simple CSS Circle */}
+              <div className="space-y-6 animate-in slide-in-from-bottom duration-500">
+                  <div className="glass-card liquid-glass bg-gradient-to-br from-primary/10 via-surface to-background rounded-[3.5rem] p-12 text-center relative border-0 shadow-2xl">
+                      <h3 className="text-[10px] font-black text-foreground/40 uppercase tracking-[0.4em] mb-10">Financial Health Score</h3>
+                      <div className="relative w-48 h-48 mx-auto flex items-center justify-center">
                           <svg className="w-full h-full transform -rotate-90">
-                              <circle cx="64" cy="64" r="56" stroke="currentColor" strokeWidth="8" fill="transparent" className="text-white/5" />
-                              <circle cx="64" cy="64" r="56" stroke="currentColor" strokeWidth="8" fill="transparent" className={report.healthScore > 70 ? "text-emerald-500" : report.healthScore > 40 ? "text-amber-500" : "text-red-500"} strokeDasharray={351} strokeDashoffset={351 - (351 * report.healthScore) / 100} />
+                              <circle cx="96" cy="96" r="85" stroke="currentColor" strokeWidth="14" fill="transparent" className="text-foreground/5" />
+                              <circle cx="96" cy="96" r="85" stroke="currentColor" strokeWidth="14" fill="transparent" className={report.healthScore > 70 ? "text-secondary" : "text-primary"} strokeDasharray={534} strokeDashoffset={534 - (534 * report.healthScore) / 100} strokeLinecap="round" />
                           </svg>
-                          <span className="absolute text-4xl font-black text-white">{report.healthScore}</span>
+                          <span className="absolute text-6xl font-[900] text-foreground tracking-tighter">{report.healthScore}</span>
                       </div>
                   </div>
 
-                  {/* Income Trend */}
-                  <div className="bg-surface border border-white/10 rounded-3xl p-5">
-                      <div className="flex items-center gap-3 mb-3">
-                          <div className={`p-2 rounded-xl ${report.incomeTrend.status === 'higher' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'}`}>
-                              <TrendingUp size={20} />
+                  {/* Report Sections with Liquid Glass */}
+                  <div className="glass-card liquid-glass p-8 rounded-[3rem] border-0 space-y-8 shadow-2xl bg-surface/40">
+                      <div className="flex items-center gap-6">
+                          <div className={`w-14 h-14 rounded-[1.5rem] flex items-center justify-center ${report.incomeTrend.status === 'higher' ? 'bg-secondary text-white neon-glow-secondary' : 'bg-danger text-white'}`}>
+                              <TrendingUp size={28} />
                           </div>
-                          <h4 className="font-bold text-white">{VI.insights.report.incomeTrend}</h4>
-                      </div>
-                      <div className="flex items-end gap-2 h-24 mt-4 px-4 pb-2 border-b border-white/5 relative">
-                          <div className="w-1/2 bg-white/10 rounded-t-lg h-[60%] relative group">
-                             <span className="absolute -top-6 left-1/2 -translate-x-1/2 text-xs text-zinc-500">Tháng trước</span>
-                          </div>
-                          <div className={`w-1/2 rounded-t-lg relative group transition-all h-[${Math.min(100, 60 + (report.incomeTrend.status === 'higher' ? 20 : -20))}%] ${report.incomeTrend.status === 'higher' ? 'bg-emerald-500' : 'bg-red-500'}`}>
-                             <span className="absolute -top-6 left-1/2 -translate-x-1/2 text-xs font-bold text-white">Tháng này</span>
+                          <div>
+                            <h4 className="font-[900] text-foreground text-sm uppercase tracking-tight">Xu hướng thu nhập</h4>
+                            <p className="text-[11px] font-black text-foreground/40 uppercase tracking-[0.2em]">{report.incomeTrend.status === 'higher' ? 'ĐANG TĂNG TRƯỞNG' : 'CẦN CẢI THIỆN'}</p>
                           </div>
                       </div>
-                      <p className="text-sm text-zinc-400 mt-3 italic">"{report.incomeTrend.message}"</p>
-                  </div>
-
-                  {/* Project Velocity */}
-                  <div className="bg-surface border border-white/10 rounded-3xl p-5">
-                      <div className="flex items-center gap-3 mb-3">
-                           <div className="p-2 bg-amber-500/20 text-amber-400 rounded-xl">
-                              <Activity size={20} />
-                          </div>
-                          <h4 className="font-bold text-white">{VI.insights.report.projectVelocity}</h4>
-                      </div>
-                      <div className="flex justify-between items-center bg-black/20 p-3 rounded-xl mb-3">
-                          <span className="text-zinc-400 text-sm">Đánh giá:</span>
-                          <span className={`font-bold ${report.projectVelocity.rating === 'High' ? 'text-emerald-400' : 'text-amber-400'}`}>{report.projectVelocity.rating}</span>
-                      </div>
-                      <p className="text-sm text-zinc-400 italic">"{report.projectVelocity.message}"</p>
-                  </div>
-
-                  {/* Goal Forecast */}
-                  <div className="bg-surface border border-white/10 rounded-3xl p-5">
-                      <div className="flex items-center gap-3 mb-3">
-                           <div className="p-2 bg-blue-500/20 text-blue-400 rounded-xl">
-                              <Target size={20} />
-                          </div>
-                          <h4 className="font-bold text-white">{VI.insights.report.goalForecast}</h4>
-                      </div>
-                      <div className="space-y-3">
-                          <div className="flex items-center gap-2">
-                              {report.goalForecast.canMeetFixedCosts ? <CheckCircle size={16} className="text-emerald-500"/> : <AlertTriangle size={16} className="text-red-500"/>}
-                              <span className="text-sm text-zinc-300">{VI.insights.report.fixedCostStatus}: <span className={report.goalForecast.canMeetFixedCosts ? "text-emerald-400" : "text-red-400"}>{report.goalForecast.canMeetFixedCosts ? "Ổn định" : "Rủi ro"}</span></span>
-                          </div>
-                          <div className="bg-white/5 p-3 rounded-xl border-l-2 border-indigo-500">
-                              <p className="text-sm text-white font-medium mb-1">{report.goalForecast.majorGoalPrediction}</p>
-                              <p className="text-xs text-zinc-500">{VI.insights.report.advice}: {report.goalForecast.advice}</p>
-                          </div>
+                      <div className="glass-card bg-foreground/[0.03] p-6 rounded-[1.75rem] border-0">
+                          <p className="text-[15px] font-bold text-foreground/90 italic leading-relaxed uppercase tracking-tight">"{report.incomeTrend.message}"</p>
                       </div>
                   </div>
                   
-                  <button onClick={handleGenerateReport} className="w-full py-3 text-sm text-zinc-500 hover:text-white transition-colors">
-                      <Zap size={14} className="inline mr-1" /> Làm mới phân tích
+                  <div className="glass-card liquid-glass p-8 rounded-[3rem] border-0 space-y-6 shadow-2xl bg-surface/40">
+                       <div className="flex items-center gap-6">
+                          <div className="w-14 h-14 rounded-[1.5rem] bg-amber-500 text-white shadow-lg flex items-center justify-center">
+                              <Target size={28} />
+                          </div>
+                          <div>
+                            <h4 className="font-[900] text-foreground text-sm uppercase tracking-tight">Dự báo lộ trình</h4>
+                            <p className="text-[11px] font-black text-foreground/40 uppercase tracking-[0.2em]">Kế hoạch mục tiêu</p>
+                          </div>
+                      </div>
+                      <p className="text-[14px] font-bold text-foreground/80 uppercase tracking-tight leading-relaxed">{report.goalForecast.majorGoalPrediction}</p>
+                  </div>
+
+                  <button onClick={handleGenerateReport} className="w-full py-6 text-[10px] font-black text-foreground/20 uppercase tracking-[0.4em] hover:text-primary transition-all">
+                      <Zap size={16} className="inline mr-3" /> Làm mới dữ liệu phân tích
                   </button>
               </div>
           )}
@@ -396,142 +334,83 @@ export const Insights: React.FC<Props> = ({ transactions, users }) => {
   );
 
   return (
-    <div className="p-4 pt-8 space-y-6 pb-24">
-      <div className="flex justify-between items-center mb-2">
-        <h2 className="text-2xl font-bold text-white flex items-center">
-          <Sparkles className="mr-2 text-primary" />
-          {VI.insights.title}
+    <div className="p-6 pt-12 space-y-8 pb-32 animate-in fade-in duration-700">
+      <div className="flex justify-between items-center px-1">
+        <h2 className="text-3xl font-[900] text-foreground tracking-tighter uppercase flex items-center gap-4">
+          <Sparkles className="text-primary" size={32} />
+          THU NHẬP
         </h2>
         {activeTab === 'planning' && (
-            <button 
-                onClick={() => setIsAiModalOpen(true)}
-                className="flex items-center space-x-1 bg-gradient-to-r from-violet-600 to-indigo-600 text-white px-3 py-1.5 rounded-full text-sm font-bold shadow-lg shadow-indigo-500/20 active:scale-95 transition-transform"
-            >
-                <Sparkles size={14} />
-                <span>{VI.insights.aiSuggestBtn}</span>
+            <button onClick={() => setIsAiModalOpen(true)} className="w-14 h-14 bg-primary text-white rounded-2xl flex items-center justify-center shadow-2xl neon-glow-primary active:scale-90 transition-all">
+                <Sparkles size={24} />
             </button>
         )}
       </div>
 
-      {/* TABS */}
-      <div className="flex p-1 bg-black/30 rounded-xl border border-white/5">
-          <button 
-            onClick={() => setActiveTab('planning')}
-            className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all ${activeTab === 'planning' ? 'bg-surfaceHighlight text-white shadow' : 'text-zinc-500'}`}
-          >
-              {VI.insights.tabs.planning}
-          </button>
-          <button 
-            onClick={() => setActiveTab('report')}
-            className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all ${activeTab === 'report' ? 'bg-surfaceHighlight text-white shadow' : 'text-zinc-500'}`}
-          >
-              {VI.insights.tabs.report}
-          </button>
+      <div className="p-1.5 glass-card bg-gradient-to-r from-primary/20 via-surface/40 to-secondary/20 rounded-[2rem] shadow-2xl border-0">
+          <div className="flex relative">
+              <button onClick={() => setActiveTab('planning')} className={`relative z-10 flex-1 py-4 text-[11px] font-black rounded-[1.5rem] transition-all uppercase tracking-[0.2em] ${activeTab === 'planning' ? 'bg-primary text-white shadow-xl neon-glow-primary' : 'text-foreground/40 hover:text-foreground/60'}`}>KẾ HOẠCH</button>
+              <button onClick={() => setActiveTab('report')} className={`relative z-10 flex-1 py-4 text-[11px] font-black rounded-[1.5rem] transition-all uppercase tracking-[0.2em] ${activeTab === 'report' ? 'bg-primary text-white shadow-xl neon-glow-primary' : 'text-foreground/40 hover:text-foreground/60'}`}>BÁO CÁO AI</button>
+          </div>
       </div>
 
       {activeTab === 'planning' ? renderPlanningTab() : renderReportTab()}
 
-      {/* EDIT/CREATE PROJECT MODAL */}
-      {isEditOpen && (
-          <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center bg-black/80 backdrop-blur-md">
-              <div className="bg-surface w-full max-w-md h-[90vh] sm:h-auto overflow-y-auto rounded-t-3xl sm:rounded-3xl p-6 border border-white/10 shadow-2xl animate-in slide-in-from-bottom duration-300">
-                  <div className="flex justify-between items-center mb-6">
-                      <h3 className="text-xl font-bold text-white">{editingProject.id ? 'Chi tiết kế hoạch' : 'Tạo kế hoạch mới'}</h3>
-                      <button onClick={() => setIsEditOpen(false)} className="p-2 bg-white/5 rounded-full"><Trash2 size={20} className="opacity-0" /></button>
+      {/* CELEBRATION MODAL */}
+      {celebrationProject && (
+          <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/90 backdrop-blur-3xl px-8 animate-in zoom-in duration-500">
+              <div className="text-center space-y-8">
+                  <div className="relative">
+                      <div className="absolute inset-0 animate-ping bg-secondary/20 rounded-full blur-3xl"></div>
+                      <div className="w-32 h-32 bg-secondary text-white rounded-[3rem] flex items-center justify-center mx-auto shadow-[0_0_50px_rgba(16,185,129,0.5)] relative z-10 animate-bounce">
+                          <PartyPopper size={64} />
+                      </div>
                   </div>
-                  
                   <div className="space-y-4">
-                      {/* Name & Desc */}
-                      <div>
-                          <label className="text-xs text-zinc-400 ml-1">{VI.insights.project.name} <span className="text-danger">*</span></label>
-                          <input 
-                              autoFocus={!editingProject.id}
-                              className="w-full bg-black/20 text-white p-3 rounded-xl border border-white/10 focus:border-primary focus:outline-none font-bold placeholder:font-normal"
-                              placeholder={VI.insights.project.placeholderName}
-                              value={editingProject.name}
-                              onChange={e => setEditingProject(prev => ({...prev, name: e.target.value}))}
-                          />
-                      </div>
-                      <div>
-                          <label className="text-xs text-zinc-400 ml-1">{VI.insights.project.expected}</label>
-                          <input 
-                              type="number"
-                              className="w-full bg-black/20 text-emerald-400 p-3 rounded-xl border border-white/10 focus:border-emerald-500 focus:outline-none font-bold"
-                              value={editingProject.expectedIncome}
-                              onChange={e => setEditingProject(prev => ({...prev, expectedIncome: Number(e.target.value)}))}
-                          />
-                      </div>
-                      
-                      <div className="grid grid-cols-2 gap-3">
-                          <div>
-                              <label className="text-xs text-zinc-400 ml-1">{VI.insights.project.start} <span className="text-danger">*</span></label>
-                              <input 
-                                  type="date"
-                                  className="w-full bg-black/20 text-white p-3 rounded-xl border border-white/10 focus:border-primary focus:outline-none"
-                                  value={editingProject.startDate}
-                                  onChange={e => setEditingProject(prev => ({...prev, startDate: e.target.value}))}
-                              />
-                          </div>
-                          <div>
-                              <label className="text-xs text-zinc-400 ml-1">{VI.insights.project.end}</label>
-                              <input 
-                                  type="date"
-                                  className="w-full bg-black/20 text-white p-3 rounded-xl border border-white/10 focus:border-primary focus:outline-none"
-                                  value={editingProject.endDate}
-                                  onChange={e => setEditingProject(prev => ({...prev, endDate: e.target.value}))}
-                              />
-                          </div>
-                      </div>
+                      <h2 className="text-4xl font-[900] text-foreground tracking-tighter uppercase">HOÀN THÀNH XUẤT SẮC!</h2>
+                      <p className="text-xl font-bold text-secondary uppercase tracking-tight">"{celebrationProject}"</p>
+                      <p className="text-lg font-black text-foreground/60 italic leading-relaxed uppercase tracking-widest">
+                        chúc mừng bạn đã hoàn thành nhiệm vụ.<br/>Tiền về tiền về yahooo!
+                      </p>
+                  </div>
+                  <button 
+                    onClick={() => setCelebrationProject(null)}
+                    className="bg-primary text-white px-12 py-6 rounded-[2rem] font-[900] text-[11px] uppercase tracking-[0.4em] shadow-2xl neon-glow-primary active:scale-95 transition-all"
+                  >
+                    TIẾP TỤC KIẾM TIỀN
+                  </button>
+              </div>
+          </div>
+      )}
 
-                      {/* Milestones Editor */}
-                      <div className="pt-4 border-t border-white/10">
-                          <div className="flex justify-between items-center mb-2">
-                               <h4 className="text-sm font-bold text-white">{VI.insights.project.milestones}</h4>
-                               <button 
-                                 type="button"
-                                 onClick={handleAddMilestone} 
-                                 className="text-primary text-xs font-bold flex items-center bg-primary/10 px-2 py-1 rounded-lg hover:bg-primary/20 transition-colors"
-                               >
-                                   <Plus size={12} className="mr-1" /> {VI.insights.project.addMilestone}
-                               </button>
-                          </div>
-                          <div className="space-y-3">
-                              {editingProject.milestones?.length === 0 && (
-                                  <p className="text-xs text-zinc-600 text-center py-2 italic">Chưa có nhiệm vụ nào.</p>
-                              )}
-                              {editingProject.milestones?.map((m, idx) => (
-                                  <div key={m.id} className="bg-white/5 p-3 rounded-xl space-y-2 border border-white/5">
-                                      <div className="flex items-center gap-2">
-                                          <input 
-                                              className="flex-1 bg-transparent border-b border-white/10 focus:border-primary focus:outline-none text-sm text-white placeholder:text-zinc-600"
-                                              placeholder={VI.insights.project.placeholderMilestone}
-                                              value={m.title}
-                                              onChange={e => updateMilestone(idx, 'title', e.target.value)}
-                                          />
-                                          <button onClick={() => removeMilestone(idx)} className="text-red-500/50 hover:text-red-500 p-1"><Trash2 size={16} /></button>
-                                      </div>
-                                      <div className="flex items-center gap-2">
-                                          <Calendar size={14} className="text-zinc-500" />
-                                          <input 
-                                              type="date"
-                                              className="bg-transparent text-xs text-zinc-400 focus:text-white focus:outline-none"
-                                              value={m.date}
-                                              onChange={e => updateMilestone(idx, 'date', e.target.value)}
-                                          />
-                                      </div>
-                                  </div>
-                              ))}
-                          </div>
+      {/* AI SUGGESTION MODAL */}
+      {isAiModalOpen && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/90 backdrop-blur-3xl px-6">
+              <div className="glass-card w-full max-w-sm rounded-[3rem] p-10 border-0 shadow-2xl animate-in zoom-in-95 bg-gradient-to-br from-surface to-background">
+                  <div className="text-center mb-10">
+                      <div className="w-20 h-20 bg-primary/10 text-primary rounded-[2rem] flex items-center justify-center mx-auto mb-6 neon-glow-primary">
+                          <Sparkles size={36} />
                       </div>
-
-                      <div className="flex gap-3 pt-4 pb-4">
-                          <button onClick={() => setIsEditOpen(false)} className="flex-1 py-3 rounded-xl font-bold text-zinc-400 bg-white/5 hover:bg-white/10">{VI.settings.cancel}</button>
+                      <h3 className="text-2xl font-[900] text-foreground tracking-tighter uppercase">AI SUGGESTION</h3>
+                  </div>
+                  <div className="space-y-8">
+                      <div className="space-y-3">
+                        <label className="text-[10px] font-black text-foreground/30 ml-2 tracking-widest uppercase">Ý tưởng kiếm tiền</label>
+                        <textarea 
+                            className="w-full bg-foreground/5 border-0 rounded-[2rem] p-6 text-foreground font-bold focus:ring-2 focus:ring-primary focus:outline-none resize-none h-40 text-sm leading-relaxed uppercase tracking-tight"
+                            placeholder="VD: Mở khóa học Online, Bán đồ handmade..."
+                            value={aiPrompt}
+                            onChange={e => setAiPrompt(e.target.value)}
+                        />
+                      </div>
+                      <div className="flex gap-4">
+                          <button onClick={() => setIsAiModalOpen(false)} className="flex-1 py-6 rounded-2xl font-black text-[11px] text-foreground/30 uppercase tracking-widest hover:text-foreground transition-all">HỦY</button>
                           <button 
-                            onClick={handleSaveProject} 
-                            className="flex-1 py-3 rounded-xl font-bold text-white bg-primary shadow-lg shadow-violet-500/20 active:scale-95 transition-all flex items-center justify-center"
+                              onClick={handleGeneratePlan}
+                              disabled={isGenerating || !aiPrompt}
+                              className="flex-[2] py-6 rounded-2xl font-black text-[11px] text-white bg-primary shadow-2xl neon-glow-primary uppercase tracking-widest disabled:opacity-50 active:scale-95 transition-all"
                           >
-                              <Save size={18} className="mr-2" />
-                              {VI.settings.save}
+                              {isGenerating ? 'ĐANG LẬP...' : 'LẬP KẾ HOẠCH'}
                           </button>
                       </div>
                   </div>
@@ -539,36 +418,75 @@ export const Insights: React.FC<Props> = ({ transactions, users }) => {
           </div>
       )}
 
-      {/* AI SUGGESTION MODAL */}
-      {isAiModalOpen && (
-          <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/90 backdrop-blur-md px-4">
-              <div className="bg-surface w-full max-w-sm rounded-3xl p-6 border border-indigo-500/30 shadow-2xl animate-in zoom-in-95">
-                  <div className="text-center mb-6">
-                      <div className="w-12 h-12 bg-indigo-500/20 text-indigo-400 rounded-full flex items-center justify-center mx-auto mb-3">
-                          <Sparkles size={24} />
-                      </div>
-                      <h3 className="text-xl font-bold text-white">{VI.insights.aiModal.title}</h3>
+      {/* EDIT MODAL */}
+      {isEditOpen && (
+          <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center bg-black/80 backdrop-blur-3xl p-6">
+              <div className="glass-card w-full max-w-md h-[85vh] sm:h-auto overflow-y-auto rounded-[3rem] p-10 shadow-2xl border-0 no-scrollbar bg-surface/90">
+                  <div className="flex justify-between items-center mb-10">
+                      <h3 className="text-2xl font-[900] text-foreground tracking-tighter uppercase">CHI TIẾT DỰ ÁN</h3>
+                      <button onClick={() => setIsEditOpen(false)} className="p-3 bg-foreground/5 rounded-2xl text-foreground hover:text-primary transition-all"><X size={24} /></button>
                   </div>
-                  
-                  <div className="space-y-4">
-                      <label className="text-xs text-zinc-400 block">{VI.insights.aiModal.inputLabel}</label>
-                      <textarea 
-                          className="w-full bg-black/30 border border-white/10 rounded-xl p-3 text-white focus:border-indigo-500 focus:outline-none resize-none h-24"
-                          placeholder={VI.insights.aiModal.inputPlaceholder}
-                          value={aiPrompt}
-                          onChange={e => setAiPrompt(e.target.value)}
-                      />
-                      
-                      <div className="flex gap-3">
-                          <button onClick={() => setIsAiModalOpen(false)} className="flex-1 py-3 rounded-xl font-bold text-zinc-400 bg-white/5">{VI.settings.cancel}</button>
-                          <button 
-                              onClick={handleGeneratePlan}
-                              disabled={isGenerating || !aiPrompt}
-                              className="flex-1 py-3 rounded-xl font-bold text-white bg-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
-                          >
-                              {isGenerating ? VI.insights.aiModal.generating : VI.insights.aiModal.generate}
-                          </button>
+                  <div className="space-y-8">
+                      <div className="space-y-3">
+                          <label className="text-[10px] font-black text-foreground/30 ml-2 tracking-widest uppercase">Tên dự án</label>
+                          <input 
+                              className="w-full bg-foreground/5 text-foreground p-6 rounded-[1.75rem] font-[800] focus:ring-2 focus:ring-primary focus:outline-none text-sm uppercase tracking-tight"
+                              value={editingProject.name}
+                              onChange={e => setEditingProject(prev => ({...prev, name: e.target.value}))}
+                          />
                       </div>
+                      <div className="space-y-3">
+                          <label className="text-[10px] font-black text-foreground/30 ml-2 tracking-widest uppercase">Kỳ vọng doanh thu (VND)</label>
+                          <input 
+                              type="number"
+                              className="w-full bg-foreground/5 text-secondary text-3xl font-[900] p-6 rounded-[1.75rem] focus:outline-none tracking-tighter"
+                              value={editingProject.expectedIncome}
+                              onChange={e => setEditingProject(prev => ({...prev, expectedIncome: Number(e.target.value)}))}
+                          />
+                      </div>
+                      {/* Milestones in Edit */}
+                      <div className="space-y-5 pt-6 border-t border-foreground/5">
+                        <div className="flex justify-between items-center">
+                            <h4 className="text-[10px] font-black text-foreground/40 uppercase tracking-[0.2em]">Các bước thực hiện</h4>
+                            <button onClick={handleAddMilestone} className="text-primary text-[10px] font-black uppercase tracking-widest bg-primary/10 px-5 py-3 rounded-2xl active:scale-95 transition-all">+ Thêm bước</button>
+                        </div>
+                        <div className="space-y-4">
+                            {editingProject.milestones?.map((m, idx) => (
+                                <div key={m.id} className="glass-card bg-foreground/5 p-6 rounded-[2rem] space-y-4 border-0 shadow-inner">
+                                    <div className="flex items-center gap-4">
+                                        <input 
+                                            className="flex-1 bg-transparent border-0 focus:outline-none text-sm font-bold text-foreground uppercase tracking-tight"
+                                            placeholder="Tên công việc..."
+                                            value={m.title}
+                                            onChange={e => updateMilestone(idx, 'title', e.target.value)}
+                                        />
+                                        <button onClick={() => removeMilestone(idx)} className="text-danger/40 hover:text-danger transition-all p-2"><Trash2 size={18} /></button>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div className="space-y-1">
+                                            <label className="text-[8px] font-black text-foreground/20 uppercase tracking-widest ml-1">Bắt đầu</label>
+                                            <input 
+                                                type="date"
+                                                className="w-full bg-foreground/5 border-0 rounded-xl p-2 text-[10px] font-black text-foreground focus:outline-none"
+                                                value={m.startDate}
+                                                onChange={e => updateMilestone(idx, 'startDate', e.target.value)}
+                                            />
+                                        </div>
+                                        <div className="space-y-1">
+                                            <label className="text-[8px] font-black text-foreground/20 uppercase tracking-widest ml-1">Hạn hoàn thành</label>
+                                            <input 
+                                                type="date"
+                                                className="w-full bg-foreground/5 border-0 rounded-xl p-2 text-[10px] font-black text-foreground focus:outline-none"
+                                                value={m.date}
+                                                onChange={e => updateMilestone(idx, 'date', e.target.value)}
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                      </div>
+                      <button onClick={handleSaveProject} className="w-full bg-primary text-white font-[900] py-6 rounded-[2rem] text-[11px] uppercase tracking-[0.3em] shadow-2xl neon-glow-primary mt-8 active:scale-95 transition-all">LƯU KẾ HOẠCH</button>
                   </div>
               </div>
           </div>

@@ -64,12 +64,18 @@ export const VI = {
     user1: "Tên hiển thị",
     user2: "Người thứ 2", // Legacy, not used in UI
     walletMain: "Tên Ví chính",
+    walletMainBalance: "Số dư Ví chính (VND)",
     walletBackup: "Tên Quỹ dự phòng",
     save: "Lưu cấu hình",
     cancel: "Hủy",
     autoDeduct: {
         title: "Tự động trích quỹ",
         description: "Khi có thu nhập vào Ví chính, tự động chuyển một phần sang Quỹ dự phòng."
+    },
+    theme: {
+      label: "Chế độ giao diện",
+      dark: "Tối",
+      light: "Sáng"
     },
     dangerZone: "Vùng nguy hiểm",
     resetData: "Khôi phục dữ liệu gốc",
@@ -146,6 +152,9 @@ export const VI = {
       checkDetail: "Chi tiết",
       confirmBtn: "Đã đúng, Lưu lại",
       backBtn: "Quay lại sửa"
+    },
+    error: {
+      insufficientBalance: "Số dư ví không đủ để thực hiện giao dịch này!"
     }
   },
   goals: {

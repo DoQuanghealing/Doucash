@@ -1,33 +1,25 @@
-import { GoogleGenerativeAI, SchemaType } from "@google/generative-ai";
-import { Transaction, Budget, User, Goal, IncomeProject, FixedCost, FinancialReport, TransactionType } from '../types';
+import { GoogleGenAI, Type } from "@google/genai";
+import { Transaction, Budget, User, Goal, IncomeProject, Milestone, FixedCost, FinancialReport, TransactionType } from '../types';
 
-// 1. Lấy API Key an toàn (Ưu tiên Vite env, fallback sang process.env)
-const apiKey = import.meta.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY || '';
+// Always use const ai = new GoogleGenAI({apiKey: process.env.API_KEY});
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
-// 2. Khởi tạo SDK (Dùng thư viện chuẩn GoogleGenerativeAI)
-const genAI = new GoogleGenerativeAI(apiKey);
-
-// 3. Dùng Model chuẩn, ổn định
-const MODEL_NAME = 'gemini-1.5-flash'; 
-
-// Hàm phụ trợ: Làm sạch chuỗi JSON do AI trả về (Xóa dấu ```json)
-const cleanJsonString = (text: string) => {
-  if (!text) return "{}";
-  return text.replace(/```json/g, '').replace(/```/g, '').trim();
-};
+const FLASH_MODEL = 'gemini-3-flash-preview';
+const PRO_MODEL = 'gemini-3-pro-preview';
 
 export const GeminiService = {
-  // Checks if we can use AI
-  isAvailable: () => !!apiKey,
+  // Checks if we can use AI - assuming process.env.API_KEY is handled externally as per guidelines
+  isAvailable: () => !!process.env.API_KEY,
 
   generateWeeklyInsight: async (transactions: Transaction[], users: User[]): Promise<string> => {
-    if (!apiKey) return "AI Insights unavailable (Missing API Key).";
+    if (!process.env.API_KEY) return "AI Insights unavailable (Missing API Key).";
 
     const recentTx = transactions.slice(-15);
+    // Note: AI understands raw numbers, but we mention VND context in prompt
     const txString = recentTx.map(t => `${t.date}: ${t.amount} VND on ${t.category} (${t.description})`).join('\n');
 
     const prompt = `
-      Analyze these recent financial transactions for a couple named ${users[0]?.name || 'User'} and ${users[1]?.name || 'Partner'}.
+      Analyze these recent financial transactions for a couple named ${users[0].name} and ${users[1].name}.
       Currency is Vietnamese Dong (VND). Note: 1 USD approx 25,000 VND.
       Transactions:
       ${txString}
@@ -47,18 +39,19 @@ export const GeminiService = {
     `;
 
     try {
-      const model = genAI.getGenerativeModel({ model: MODEL_NAME });
-      const result = await model.generateContent(prompt);
-      const response = await result.response;
-      return response.text() || "Đã ghi nhận thói quen chi tiêu.";
+      const response = await ai.models.generateContent({
+        model: FLASH_MODEL,
+        contents: prompt,
+      });
+      return response.text || "Đã ghi nhận thói quen chi tiêu.";
     } catch (e) {
-      console.error("Gemini Error:", e);
-      return "AI đang quan sát trong im lặng (Lỗi kết nối).";
+      console.error(e);
+      return "AI đang quan sát trong im lặng (Lỗi).";
     }
   },
 
   generateReflectionPrompt: async (overspentCategory: string, amountOver: number): Promise<string> => {
-    if (!apiKey) return `Cảnh báo: Bạn đã tiêu quá đà vào ${overspentCategory}.`;
+    if (!process.env.API_KEY) return `Overspending detected in ${overspentCategory}.`;
 
     const prompt = `
       The user just went ${amountOver} VND over budget in the '${overspentCategory}' category.
@@ -68,16 +61,18 @@ export const GeminiService = {
     `;
 
     try {
-      const model = genAI.getGenerativeModel({ model: MODEL_NAME });
-      const result = await model.generateContent(prompt);
-      return result.response.text() || "Đó là lựa chọn của bạn.";
+      const response = await ai.models.generateContent({
+        model: FLASH_MODEL,
+        contents: prompt,
+      });
+      return response.text || "Đó là lựa chọn của bạn.";
     } catch (e) {
       return "Đó là lựa chọn của bạn.";
     }
   },
 
-  generateTransactionComment: async (transaction: Transaction): Promise<string> => {
-    if (!apiKey) return "";
+  generateTransactionComment: async (transaction: any): Promise<string> => {
+    if (!process.env.API_KEY) return "";
 
     const prompt = `
       The user just spent ${transaction.amount} VND on ${transaction.category} (${transaction.description}).
@@ -86,42 +81,54 @@ export const GeminiService = {
     `;
 
     try {
-      const model = genAI.getGenerativeModel({ model: MODEL_NAME });
-      const result = await model.generateContent(prompt);
-      return result.response.text() || "";
+      const response = await ai.models.generateContent({
+        model: FLASH_MODEL,
+        contents: prompt,
+      });
+      return response.text || "";
     } catch (e) {
       return "";
     }
   },
 
   generateBadge: async (transactions: Transaction[]): Promise<{title: string, description: string}> => {
-     if (!apiKey) return { title: 'Tập sự', description: 'Bắt đầu theo dõi.' };
+     if (!process.env.API_KEY) return { title: 'Tập sự', description: 'Bắt đầu theo dõi.' };
 
+     // Simple heuristic for demo
      const prompt = `
-       Based on these transactions (in VND): ${JSON.stringify(transactions.slice(-10))}
-       Invent a creative, sarcastic achievement badge title and short description (max 10 words) in Vietnamese.
-       Tone: Dry humor.
-       Rules: NO emojis. NO exclamation marks.
-       Example: "Latte Legend: Funded the local cafe renovation."
-       Return JSON format: { "title": "...", "description": "..." }
+        Based on these transactions (in VND): ${JSON.stringify(transactions.slice(-10))}
+        Invent a creative, sarcastic achievement badge title and short description (max 10 words) in Vietnamese.
+        Tone: Dry humor.
+        Rules: NO emojis. NO exclamation marks.
+        Example: "Latte Legend: Funded the local cafe renovation."
+        Return JSON format matching the schema.
      `;
 
       try {
-        const model = genAI.getGenerativeModel({ 
-            model: MODEL_NAME,
-            generationConfig: { responseMimeType: "application/json" } // Ép kiểu JSON
+        const response = await ai.models.generateContent({
+            model: FLASH_MODEL,
+            contents: prompt,
+            config: { 
+                responseMimeType: 'application/json',
+                responseSchema: {
+                    type: Type.OBJECT,
+                    properties: {
+                        title: { type: Type.STRING },
+                        description: { type: Type.STRING }
+                    },
+                    required: ['title', 'description']
+                }
+            }
         });
-        const result = await model.generateContent(prompt);
-        const text = cleanJsonString(result.response.text());
-        return JSON.parse(text);
+        const text = response.text;
+        return JSON.parse(text || '{}');
       } catch (e) {
-        console.error(e);
         return { title: 'Người bí ẩn', description: 'Tiền đi đâu không ai biết.' };
       }
   },
 
   generateIncomePlan: async (idea: string): Promise<any> => {
-      if (!apiKey) return null;
+      if (!process.env.API_KEY) return null;
 
       const prompt = `
         The user wants to increase income by: "${idea}".
@@ -129,28 +136,38 @@ export const GeminiService = {
         Currency: VND.
         Language: Vietnamese.
         
-        Return valid JSON strictly matching this structure:
-        {
-            "name": "Project Name (Short & Catchy)",
-            "description": "1 sentence description",
-            "expectedIncome": number (estimate in VND),
-            "milestones": [
-                { "title": "Step 1", "daysFromNow": 1 },
-                { "title": "Step 2", "daysFromNow": 3 },
-                { "title": "Step 3", "daysFromNow": 7 }
-            ]
-        }
         Generate 3-5 milestones.
       `;
 
       try {
-          const model = genAI.getGenerativeModel({ 
-            model: MODEL_NAME,
-            generationConfig: { responseMimeType: "application/json" }
+          const response = await ai.models.generateContent({
+              model: PRO_MODEL,
+              contents: prompt,
+              config: { 
+                  responseMimeType: 'application/json',
+                  responseSchema: {
+                      type: Type.OBJECT,
+                      properties: {
+                          name: { type: Type.STRING },
+                          description: { type: Type.STRING },
+                          expectedIncome: { type: Type.NUMBER },
+                          milestones: {
+                              type: Type.ARRAY,
+                              items: {
+                                  type: Type.OBJECT,
+                                  properties: {
+                                      title: { type: Type.STRING },
+                                      daysFromNow: { type: Type.NUMBER }
+                                  },
+                                  required: ['title', 'daysFromNow']
+                              }
+                          }
+                      },
+                      required: ['name', 'description', 'expectedIncome', 'milestones']
+                  }
+              }
           });
-          const result = await model.generateContent(prompt);
-          const text = cleanJsonString(result.response.text());
-          return JSON.parse(text);
+          return JSON.parse(response.text || '{}');
       } catch (e) {
           console.error(e);
           return null;
@@ -163,8 +180,9 @@ export const GeminiService = {
       projects: IncomeProject[], 
       fixedCosts: FixedCost[]
   ): Promise<FinancialReport | null> => {
-      if (!apiKey) return null;
+      if (!process.env.API_KEY) return null;
 
+      // Prepare context data
       const now = new Date();
       const currentMonth = now.getMonth();
       const lastMonth = currentMonth === 0 ? 11 : currentMonth - 1;
@@ -197,38 +215,53 @@ export const GeminiService = {
         Tasks:
         1. Calculate a "Health Score" (0-100) based on income stability, goal progress, and project execution.
         2. Analyze Income Trend (This month vs Last month).
-        3. Evaluate Project Velocity.
-        4. Forecast Goals.
-
-        Output strictly JSON:
-        {
-            "healthScore": number,
-            "incomeTrend": {
-                "status": "higher" | "lower" | "stable",
-                "percentage": number,
-                "message": "Short 1 sentence comment in Vietnamese"
-            },
-            "projectVelocity": {
-                "rating": "High" | "Medium" | "Low",
-                "completedProjects": number,
-                "message": "Short analysis in Vietnamese"
-            },
-            "goalForecast": {
-                "canMeetFixedCosts": boolean,
-                "majorGoalPrediction": "Prediction in Vietnamese",
-                "advice": "1 sentence strategic advice in Vietnamese"
-            }
-        }
+        3. Evaluate Project Velocity (How well are they executing income plans?).
+        4. Forecast Goals: Can they pay fixed costs? Are they on track for major goals (like buying a house)?
       `;
 
       try {
-          const model = genAI.getGenerativeModel({ 
-            model: MODEL_NAME,
-            generationConfig: { responseMimeType: "application/json" }
+          const response = await ai.models.generateContent({
+              model: PRO_MODEL,
+              contents: prompt,
+              config: { 
+                  responseMimeType: 'application/json',
+                  responseSchema: {
+                      type: Type.OBJECT,
+                      properties: {
+                          healthScore: { type: Type.NUMBER },
+                          incomeTrend: {
+                              type: Type.OBJECT,
+                              properties: {
+                                  status: { type: Type.STRING, enum: ['higher', 'lower', 'stable'] },
+                                  percentage: { type: Type.NUMBER },
+                                  message: { type: Type.STRING }
+                              },
+                              required: ['status', 'percentage', 'message']
+                          },
+                          projectVelocity: {
+                              type: Type.OBJECT,
+                              properties: {
+                                  rating: { type: Type.STRING, enum: ['High', 'Medium', 'Low'] },
+                                  completedProjects: { type: Type.NUMBER },
+                                  message: { type: Type.STRING }
+                              },
+                              required: ['rating', 'completedProjects', 'message']
+                          },
+                          goalForecast: {
+                              type: Type.OBJECT,
+                              properties: {
+                                  canMeetFixedCosts: { type: Type.BOOLEAN },
+                                  majorGoalPrediction: { type: Type.STRING },
+                                  advice: { type: Type.STRING }
+                              },
+                              required: ['canMeetFixedCosts', 'majorGoalPrediction', 'advice']
+                          }
+                      },
+                      required: ['healthScore', 'incomeTrend', 'projectVelocity', 'goalForecast']
+                  }
+              }
           });
-          const result = await model.generateContent(prompt);
-          const text = cleanJsonString(result.response.text());
-          return JSON.parse(text);
+          return JSON.parse(response.text || '{}');
       } catch (e) {
           console.error(e);
           return null;

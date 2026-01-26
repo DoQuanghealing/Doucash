@@ -1,8 +1,5 @@
 import { Transaction, Wallet, Goal, TransactionType, Category, User, Budget, IncomeProject, FixedCost, AllocationSetting } from '../types';
 
-// This service mimics a Google Sheets backend by using LocalStorage with a schema 
-// that is easily mappable to 2D arrays (rows/columns).
-
 const KEYS = {
   TRANSACTIONS: 'duocash_transactions',
   WALLETS: 'duocash_wallets',
@@ -15,346 +12,211 @@ const KEYS = {
   ALLOCATION_CONFIG: 'duocash_allocation_config',
   AUTO_DEDUCT_PERCENT: 'duocash_auto_deduct_percent',
   AUTO_DEDUCT_ENABLED: 'duocash_auto_deduct_enabled',
+  THEME: 'duocash_theme',
 };
 
 const INITIAL_USERS: User[] = [
   { id: 'u1', name: 'Tôi', avatar: '😎' },
-  // Second user kept for legacy data structure compatibility but hidden in UI
   { id: 'u2', name: 'Partner', avatar: '👻' },
 ];
 
 const INITIAL_WALLETS: Wallet[] = [
-  { id: 'w1', userId: 'u1', name: "Ví chính", balance: 25000000 },
-  { id: 'w2', userId: 'u1', name: "Quỹ dự phòng", balance: 10000000 },
+  { id: 'w1', userId: 'u1', name: "Ví chính", balance: 0 },
+  { id: 'w2', userId: 'u1', name: "Quỹ dự phòng", balance: 0 },
 ];
 
-const INITIAL_BUDGETS: Budget[] = [
-  { category: Category.FOOD, limit: 15000000, spent: 0 },
-  { category: Category.SHOPPING, limit: 5000000, spent: 0 },
-  { category: Category.ENTERTAINMENT, limit: 3000000, spent: 0 },
-  { category: Category.TRANSPORT, limit: 2000000, spent: 0 },
-];
+const INITIAL_BUDGETS: Budget[] = Object.values(Category)
+  .filter(c => c !== Category.INCOME && c !== Category.TRANSFER)
+  .map(c => ({ category: c as Category, limit: 0, spent: 0 }));
 
 export const StorageService = {
-  // Initialize default data if empty
   init: () => {
-    if (!localStorage.getItem(KEYS.USERS)) {
-      localStorage.setItem(KEYS.USERS, JSON.stringify(INITIAL_USERS));
-    }
-    if (!localStorage.getItem(KEYS.WALLETS)) {
-      localStorage.setItem(KEYS.WALLETS, JSON.stringify(INITIAL_WALLETS));
-    }
-    if (!localStorage.getItem(KEYS.CATEGORIES)) {
-      // Seed default categories from Enum
-      const defaultCats = Object.values(Category);
-      localStorage.setItem(KEYS.CATEGORIES, JSON.stringify(defaultCats));
-    }
-    if (!localStorage.getItem(KEYS.BUDGETS)) {
-      localStorage.setItem(KEYS.BUDGETS, JSON.stringify(INITIAL_BUDGETS));
-    }
-    if (!localStorage.getItem(KEYS.TRANSACTIONS)) {
-      // Add some dummy transactions (converted to VND scale roughly)
-      const dummyTransactions: Transaction[] = [
-        { id: 't1', date: new Date().toISOString(), amount: 20000000, type: TransactionType.INCOME, category: Category.INCOME, walletId: 'w1', description: 'Lương tháng', timestamp: Date.now() },
-        { id: 't2', date: new Date().toISOString(), amount: 500000, type: TransactionType.EXPENSE, category: Category.FOOD, walletId: 'w1', description: 'Ăn đồ nướng', timestamp: Date.now() },
-        { id: 't3', date: new Date().toISOString(), amount: 2500000, type: TransactionType.EXPENSE, category: Category.SHOPPING, walletId: 'w1', description: 'Giày mới', timestamp: Date.now() },
-      ];
-      localStorage.setItem(KEYS.TRANSACTIONS, JSON.stringify(dummyTransactions));
-    }
-    if (!localStorage.getItem(KEYS.GOALS)) {
-      const initialGoal: Goal = {
-        id: 'g1',
-        name: 'Mua nhà',
-        targetAmount: 2000000000,
-        currentAmount: 150000000,
-        deadline: '2026-01-01',
-        rounds: [
-          { id: 'r1', date: '2024-01-15', amount: 50000000, contributorId: 'u1', note: 'Thưởng tết' },
-        ]
-      };
-      localStorage.setItem(KEYS.GOALS, JSON.stringify([initialGoal]));
-    }
-    if (!localStorage.getItem(KEYS.FIXED_COSTS)) {
-       // Seed default fixed costs
-       const nextMonth = new Date();
-       if (nextMonth.getDate() > 20) nextMonth.setMonth(nextMonth.getMonth() + 1);
-       nextMonth.setDate(20);
-       
-       const defaultFixed: FixedCost[] = [
-           { id: 'fc1', title: 'Tiền nhà', amount: 8000000, allocatedAmount: 0, nextDueDate: nextMonth.toISOString().split('T')[0], frequencyMonths: 1, description: 'Đóng ngày 20 hàng tháng' },
-           { id: 'fc2', title: 'Tiền học', amount: 5000000, allocatedAmount: 0, nextDueDate: new Date(new Date().setDate(10)).toISOString().split('T')[0], frequencyMonths: 1, description: 'Đóng trước ngày 10' },
-           { id: 'fc3', title: 'Wifi 6 Tháng', amount: 1200000, allocatedAmount: 200000, nextDueDate: new Date(new Date().setMonth(new Date().getMonth() + 5)).toISOString().split('T')[0], frequencyMonths: 6, description: 'Gói 6 tháng' }
-       ];
-       localStorage.setItem(KEYS.FIXED_COSTS, JSON.stringify(defaultFixed));
-    }
+    if (!localStorage.getItem(KEYS.USERS)) localStorage.setItem(KEYS.USERS, JSON.stringify(INITIAL_USERS));
+    if (!localStorage.getItem(KEYS.WALLETS)) localStorage.setItem(KEYS.WALLETS, JSON.stringify(INITIAL_WALLETS));
+    if (!localStorage.getItem(KEYS.CATEGORIES)) localStorage.setItem(KEYS.CATEGORIES, JSON.stringify(Object.values(Category)));
+    if (!localStorage.getItem(KEYS.BUDGETS)) localStorage.setItem(KEYS.BUDGETS, JSON.stringify(INITIAL_BUDGETS));
+    if (!localStorage.getItem(KEYS.TRANSACTIONS)) localStorage.setItem(KEYS.TRANSACTIONS, JSON.stringify([]));
+    if (!localStorage.getItem(KEYS.THEME)) localStorage.setItem(KEYS.THEME, 'dark');
   },
 
-  resetData: () => {
-    // Clear all keys managed by this app
-    Object.values(KEYS).forEach(key => {
-        localStorage.removeItem(key);
-    });
-    // Re-initialize with defaults
-    StorageService.init();
+  resetFull: () => {
+    localStorage.setItem(KEYS.WALLETS, JSON.stringify(INITIAL_WALLETS));
+    localStorage.setItem(KEYS.TRANSACTIONS, JSON.stringify([]));
+    localStorage.setItem(KEYS.BUDGETS, JSON.stringify(INITIAL_BUDGETS));
+    localStorage.setItem(KEYS.GOALS, JSON.stringify([]));
+    localStorage.setItem(KEYS.FIXED_COSTS, JSON.stringify([]));
+    localStorage.setItem(KEYS.PROJECTS, JSON.stringify([]));
+    localStorage.setItem(KEYS.AUTO_DEDUCT_ENABLED, 'false');
+    localStorage.setItem(KEYS.ALLOCATION_CONFIG, JSON.stringify([]));
+    localStorage.setItem(KEYS.AUTO_DEDUCT_PERCENT, '10');
   },
 
-  getUsers: (): User[] => {
-    const data = localStorage.getItem(KEYS.USERS);
-    return data ? JSON.parse(data) : INITIAL_USERS;
+  resetBalancesOnly: () => {
+    const wallets = StorageService.getWallets();
+    const zeroedWallets = wallets.map(w => ({ ...w, balance: 0 }));
+    const budgets = StorageService.getBudgets();
+    const resetBudgets = budgets.map(b => ({ ...b, spent: 0 }));
+    const goals = StorageService.getGoals();
+    const resetGoals = goals.map(g => ({ ...g, currentAmount: 0, rounds: [] }));
+    const costs = StorageService.getFixedCosts();
+    const resetCosts = costs.map(c => ({ ...c, allocatedAmount: 0 }));
+    const projects = StorageService.getIncomeProjects();
+    const resetProjects = projects.map(p => ({
+      ...p,
+      status: 'planning' as const,
+      milestones: p.milestones.map(m => ({ ...m, isCompleted: false }))
+    }));
+    localStorage.setItem(KEYS.WALLETS, JSON.stringify(zeroedWallets));
+    localStorage.setItem(KEYS.TRANSACTIONS, JSON.stringify([]));
+    localStorage.setItem(KEYS.BUDGETS, JSON.stringify(resetBudgets));
+    localStorage.setItem(KEYS.GOALS, JSON.stringify(resetGoals));
+    localStorage.setItem(KEYS.FIXED_COSTS, JSON.stringify(resetCosts));
+    localStorage.setItem(KEYS.PROJECTS, JSON.stringify(resetProjects));
   },
 
-  updateUsers: (users: User[]) => {
-    localStorage.setItem(KEYS.USERS, JSON.stringify(users));
-  },
-
-  getCategories: (): string[] => {
-    const data = localStorage.getItem(KEYS.CATEGORIES);
-    if (data) return JSON.parse(data);
-    return Object.values(Category);
-  },
-
+  getTheme: (): 'dark' | 'light' => (localStorage.getItem(KEYS.THEME) as 'dark' | 'light') || 'dark',
+  setTheme: (theme: 'dark' | 'light') => localStorage.setItem(KEYS.THEME, theme),
+  getUsers: (): User[] => JSON.parse(localStorage.getItem(KEYS.USERS) || '[]'),
+  updateUsers: (users: User[]) => localStorage.setItem(KEYS.USERS, JSON.stringify(users)),
+  getCategories: (): string[] => JSON.parse(localStorage.getItem(KEYS.CATEGORIES) || '[]'),
   addCategory: (newCategory: string): string[] => {
     const categories = StorageService.getCategories();
-    // Check for duplicates (case insensitive)
     if (!categories.some(c => c.toLowerCase() === newCategory.trim().toLowerCase())) {
       categories.push(newCategory.trim());
       localStorage.setItem(KEYS.CATEGORIES, JSON.stringify(categories));
     }
     return categories;
   },
-
-  getTransactions: (): Transaction[] => {
-    const data = localStorage.getItem(KEYS.TRANSACTIONS);
-    return data ? JSON.parse(data) : [];
-  },
-
+  getTransactions: (): Transaction[] => JSON.parse(localStorage.getItem(KEYS.TRANSACTIONS) || '[]'),
   addTransaction: (tx: Transaction) => {
     const txs = StorageService.getTransactions();
-    txs.push(tx); // Append row
+    txs.push(tx);
     localStorage.setItem(KEYS.TRANSACTIONS, JSON.stringify(txs));
     
-    // Update wallet balance
     const wallets = StorageService.getWallets();
     const wallet = wallets.find(w => w.id === tx.walletId);
     if (wallet) {
       if (tx.type === TransactionType.INCOME) wallet.balance += tx.amount;
-      if (tx.type === TransactionType.EXPENSE) wallet.balance -= tx.amount;
-      if (tx.type === TransactionType.TRANSFER) {
-          wallet.balance -= tx.amount;
-      }
+      else wallet.balance -= tx.amount;
       localStorage.setItem(KEYS.WALLETS, JSON.stringify(wallets));
     }
-
-    // --- AUTO DEDUCT LOGIC ---
-    // If it's an INCOME transaction, check if we need to auto-transfer to Black Fund (Wallet 2)
-    if (tx.type === TransactionType.INCOME) {
-        const isEnabled = StorageService.getAutoDeductEnabled();
-        const autoDeductPercent = StorageService.getAutoDeductPercent();
-        
-        if (isEnabled && autoDeductPercent > 0) {
-             const wallets = StorageService.getWallets();
-             const targetWallet = wallets.find(w => w.id === 'w2'); // Assuming w2 is "Quỹ dự phòng"
-             
-             // Only deduct if target exists and source is NOT the target (prevent loop if income goes straight to savings)
-             if (targetWallet && tx.walletId !== targetWallet.id) {
-                 const deductAmount = Math.floor(tx.amount * (autoDeductPercent / 100));
-                 if (deductAmount > 0) {
-                     // 1. Create Transfer OUT from Source
-                     const transferOut: Transaction = {
-                         id: `tx_auto_out_${Date.now()}`,
-                         date: tx.date,
-                         amount: deductAmount,
-                         type: TransactionType.TRANSFER,
-                         category: Category.TRANSFER,
-                         walletId: tx.walletId,
-                         description: `Trích quỹ dự phòng (${autoDeductPercent}%)`,
-                         timestamp: Date.now() + 1
-                     };
-                     
-                     // 2. Create Transfer IN to Target (Simulated by adding balance directly or creating INCOME-like transfer)
-                     // For correct accounting, we should create a mirrored transaction or just update balance.
-                     // Let's update balance of target wallet directly for simplicity in this context
-                     targetWallet.balance += deductAmount;
-                     localStorage.setItem(KEYS.WALLETS, JSON.stringify(wallets)); // Save updated target wallet
-                     
-                     // Recursive call safe because type is TRANSFER
-                     StorageService.addTransaction(transferOut);
-                 }
-             }
-        }
-    }
-
-    return wallets; // Return updated wallets
   },
-
-  getWallets: (): Wallet[] => {
-    const data = localStorage.getItem(KEYS.WALLETS);
-    return data ? JSON.parse(data) : [];
-  },
-
-  updateWallets: (wallets: Wallet[]) => {
+  transferFunds: (fromId: string, toId: string, amount: number, description: string) => {
+    const wallets = StorageService.getWallets();
+    const fromIdx = wallets.findIndex(w => w.id === fromId);
+    const toIdx = wallets.findIndex(w => w.id === toId);
+    
+    if (fromIdx === -1 || toIdx === -1 || wallets[fromIdx].balance < amount) return false;
+    
+    wallets[fromIdx].balance -= amount;
+    wallets[toIdx].balance += amount;
+    
+    const txs = StorageService.getTransactions();
+    txs.push({
+      id: `trf_${Date.now()}`,
+      date: new Date().toISOString(),
+      amount,
+      type: TransactionType.TRANSFER,
+      category: Category.TRANSFER,
+      walletId: fromId,
+      description: description || `Chuyển sang ${wallets[toIdx].name}`,
+      timestamp: Date.now()
+    });
+    
     localStorage.setItem(KEYS.WALLETS, JSON.stringify(wallets));
+    localStorage.setItem(KEYS.TRANSACTIONS, JSON.stringify(txs));
+    return true;
   },
-
-  getGoals: (): Goal[] => {
-    const data = localStorage.getItem(KEYS.GOALS);
-    return data ? JSON.parse(data) : [];
-  },
-
+  getWallets: (): Wallet[] => JSON.parse(localStorage.getItem(KEYS.WALLETS) || '[]'),
+  updateWallets: (wallets: Wallet[]) => localStorage.setItem(KEYS.WALLETS, JSON.stringify(wallets)),
+  getGoals: (): Goal[] => JSON.parse(localStorage.getItem(KEYS.GOALS) || '[]'),
   addGoal: (goal: Goal) => {
     const goals = StorageService.getGoals();
     goals.push(goal);
     localStorage.setItem(KEYS.GOALS, JSON.stringify(goals));
   },
-
   contributeToGoal: (goalId: string, walletId: string, amount: number, note: string, userId: string) => {
-    // 1. Get all Data
     const goals = StorageService.getGoals();
     const wallets = StorageService.getWallets();
     const txs = StorageService.getTransactions();
-
-    const goalIndex = goals.findIndex(g => g.id === goalId);
-    const walletIndex = wallets.findIndex(w => w.id === walletId);
-
-    if (goalIndex === -1 || walletIndex === -1) return false;
-
-    // 2. Validation
-    if (wallets[walletIndex].balance < amount) return false;
-
-    // 3. Update Wallet (Deduct)
-    wallets[walletIndex].balance -= amount;
-
-    // 4. Update Goal (Add)
-    goals[goalIndex].currentAmount += amount;
-    goals[goalIndex].rounds.push({
-        id: `r_${Date.now()}`,
-        date: new Date().toISOString().split('T')[0],
-        amount: amount,
-        contributorId: userId,
-        note: note || 'Nạp tiền đầu tư'
-    });
-
-    // 5. Create Transaction Record (Transfer/Expense)
-    // We treat this as a TRANSFER to an asset (the goal)
-    txs.push({
-        id: `tx_${Date.now()}`,
-        date: new Date().toISOString(),
-        amount: amount,
-        type: TransactionType.TRANSFER,
-        category: Category.INVESTMENT, // Or custom 'Goal' category
-        walletId: walletId,
-        description: `Nạp mục tiêu: ${goals[goalIndex].name}`,
-        timestamp: Date.now()
-    });
-
-    // 6. Save All
+    const gIdx = goals.findIndex(g => g.id === goalId);
+    const wIdx = wallets.findIndex(w => w.id === walletId);
+    if (gIdx === -1 || wIdx === -1 || wallets[wIdx].balance < amount) return false;
+    wallets[wIdx].balance -= amount;
+    goals[gIdx].currentAmount += amount;
+    goals[gIdx].rounds.push({ id: `r_${Date.now()}`, date: new Date().toISOString().split('T')[0], amount, contributorId: userId, note: note || 'Nạp tiền' });
+    txs.push({ id: `tx_${Date.now()}`, date: new Date().toISOString(), amount, type: TransactionType.TRANSFER, category: Category.INVESTMENT, walletId, description: `Nạp mục tiêu: ${goals[gIdx].name}`, timestamp: Date.now() });
     localStorage.setItem(KEYS.GOALS, JSON.stringify(goals));
     localStorage.setItem(KEYS.WALLETS, JSON.stringify(wallets));
     localStorage.setItem(KEYS.TRANSACTIONS, JSON.stringify(txs));
-
     return true;
   },
-
   updateGoal: (updatedGoal: Goal) => {
     const goals = StorageService.getGoals();
     const index = goals.findIndex(g => g.id === updatedGoal.id);
-    if (index !== -1) {
-      goals[index] = updatedGoal;
-      localStorage.setItem(KEYS.GOALS, JSON.stringify(goals));
-    }
+    if (index !== -1) { goals[index] = updatedGoal; localStorage.setItem(KEYS.GOALS, JSON.stringify(goals)); }
   },
-
-  getBudgets: (): Budget[] => {
-    const data = localStorage.getItem(KEYS.BUDGETS);
-    return data ? JSON.parse(data) : INITIAL_BUDGETS;
+  getBudgets: (): Budget[] => JSON.parse(localStorage.getItem(KEYS.BUDGETS) || '[]'),
+  updateBudgets: (budgets: Budget[]) => localStorage.setItem(KEYS.BUDGETS, JSON.stringify(budgets)),
+  getIncomeProjects: (): IncomeProject[] => JSON.parse(localStorage.getItem(KEYS.PROJECTS) || '[]'),
+  addIncomeProject: (p: IncomeProject) => {
+    const ps = StorageService.getIncomeProjects(); ps.push(p);
+    localStorage.setItem(KEYS.PROJECTS, JSON.stringify(ps));
   },
-
-  updateBudgets: (budgets: Budget[]) => {
-    localStorage.setItem(KEYS.BUDGETS, JSON.stringify(budgets));
+  updateIncomeProject: (up: IncomeProject) => {
+    const ps = StorageService.getIncomeProjects();
+    const idx = ps.findIndex(p => p.id === up.id);
+    if (idx !== -1) { ps[idx] = up; localStorage.setItem(KEYS.PROJECTS, JSON.stringify(ps)); }
   },
-
-  // --- INCOME PROJECTS ---
-  getIncomeProjects: (): IncomeProject[] => {
-    const data = localStorage.getItem(KEYS.PROJECTS);
-    return data ? JSON.parse(data) : [];
-  },
-
-  addIncomeProject: (project: IncomeProject) => {
-    const projects = StorageService.getIncomeProjects();
-    projects.push(project);
-    localStorage.setItem(KEYS.PROJECTS, JSON.stringify(projects));
-  },
-
-  updateIncomeProject: (updatedProject: IncomeProject) => {
-    const projects = StorageService.getIncomeProjects();
-    const index = projects.findIndex(p => p.id === updatedProject.id);
-    if (index !== -1) {
-      projects[index] = updatedProject;
-      localStorage.setItem(KEYS.PROJECTS, JSON.stringify(projects));
-    }
-  },
-
   deleteIncomeProject: (id: string) => {
-    const projects = StorageService.getIncomeProjects();
-    const filtered = projects.filter(p => p.id !== id);
-    localStorage.setItem(KEYS.PROJECTS, JSON.stringify(filtered));
+    const ps = StorageService.getIncomeProjects().filter(p => p.id !== id);
+    localStorage.setItem(KEYS.PROJECTS, JSON.stringify(ps));
   },
-
-  // --- FIXED COSTS ---
-  getFixedCosts: (): FixedCost[] => {
-      const data = localStorage.getItem(KEYS.FIXED_COSTS);
-      const costs = data ? JSON.parse(data) : [];
-      // Migration for old data
-      return costs.map((c: any) => ({ ...c, allocatedAmount: c.allocatedAmount || 0 }));
+  getFixedCosts: (): FixedCost[] => JSON.parse(localStorage.getItem(KEYS.FIXED_COSTS) || '[]'),
+  addFixedCost: (c: FixedCost) => {
+    const cs = StorageService.getFixedCosts(); cs.push(c);
+    localStorage.setItem(KEYS.FIXED_COSTS, JSON.stringify(cs));
   },
-
-  addFixedCost: (cost: FixedCost) => {
-      const costs = StorageService.getFixedCosts();
-      costs.push(cost);
-      localStorage.setItem(KEYS.FIXED_COSTS, JSON.stringify(costs));
+  updateFixedCost: (uc: FixedCost) => {
+    const cs = StorageService.getFixedCosts();
+    const idx = cs.findIndex(c => c.id === uc.id);
+    if (idx !== -1) { cs[idx] = uc; localStorage.setItem(KEYS.FIXED_COSTS, JSON.stringify(cs)); }
   },
-
-  updateFixedCost: (updatedCost: FixedCost) => {
-      const costs = StorageService.getFixedCosts();
-      const index = costs.findIndex(c => c.id === updatedCost.id);
-      if (index !== -1) {
-          costs[index] = updatedCost;
-          localStorage.setItem(KEYS.FIXED_COSTS, JSON.stringify(costs));
-      }
-  },
-
   deleteFixedCost: (id: string) => {
-      const costs = StorageService.getFixedCosts();
-      const filtered = costs.filter(c => c.id !== id);
-      localStorage.setItem(KEYS.FIXED_COSTS, JSON.stringify(filtered));
+    const cs = StorageService.getFixedCosts().filter(c => c.id !== id);
+    localStorage.setItem(KEYS.FIXED_COSTS, JSON.stringify(cs));
   },
-
-  // --- ALLOCATION CONFIG ---
-  getAllocationConfig: (): AllocationSetting[] => {
-    const data = localStorage.getItem(KEYS.ALLOCATION_CONFIG);
-    return data ? JSON.parse(data) : [];
+  getAllocationConfig: (): AllocationSetting[] => JSON.parse(localStorage.getItem(KEYS.ALLOCATION_CONFIG) || '[]'),
+  saveAllocationConfig: (config: AllocationSetting[]) => localStorage.setItem(KEYS.ALLOCATION_CONFIG, JSON.stringify(config)),
+  executeAllocation: (amount: number, sourceWalletId: string) => {
+    const config = StorageService.getAllocationConfig();
+    const fixedCosts = StorageService.getFixedCosts();
+    const goals = StorageService.getGoals();
+    const wallets = StorageService.getWallets();
+    const txs = StorageService.getTransactions();
+    const sourceWallet = wallets.find(w => w.id === sourceWalletId);
+    if (!sourceWallet) return false;
+    sourceWallet.balance += amount;
+    txs.push({ id: `tx_alloc_in_${Date.now()}`, date: new Date().toISOString(), amount, type: TransactionType.INCOME, category: Category.INCOME, walletId: sourceWalletId, description: 'Thu nhập phân bổ tự động', timestamp: Date.now() });
+    config.filter(s => s.isEnabled && s.percentage > 0).forEach(setting => {
+      const allocAmount = Math.floor(amount * (setting.percentage / 100));
+      if (allocAmount <= 0) return;
+      if (setting.type === 'COST') {
+        const cost = fixedCosts.find(c => c.id === setting.itemId);
+        if (cost) { cost.allocatedAmount += allocAmount; sourceWallet.balance -= allocAmount; txs.push({ id: `tx_alloc_out_${setting.itemId}_${Date.now()}`, date: new Date().toISOString(), amount: allocAmount, type: TransactionType.TRANSFER, category: Category.BILLS, walletId: sourceWalletId, description: `Tích lũy hóa đơn: ${cost.title}`, timestamp: Date.now() + 1 }); }
+      } else if (setting.type === 'GOAL') {
+        const goal = goals.find(g => g.id === setting.itemId);
+        if (goal) { goal.currentAmount += allocAmount; sourceWallet.balance -= allocAmount; goal.rounds.push({ id: `r_alloc_${Date.now()}`, date: new Date().toISOString().split('T')[0], amount: allocAmount, contributorId: 'u1', note: 'Phân bổ tự động' }); txs.push({ id: `tx_alloc_out_${setting.itemId}_${Date.now()}`, date: new Date().toISOString(), amount: allocAmount, type: TransactionType.TRANSFER, category: Category.INVESTMENT, walletId: sourceWalletId, description: `Nạp mục tiêu: ${goal.name}`, timestamp: Date.now() + 1 }); }
+      }
+    });
+    localStorage.setItem(KEYS.WALLETS, JSON.stringify(wallets));
+    localStorage.setItem(KEYS.FIXED_COSTS, JSON.stringify(fixedCosts));
+    localStorage.setItem(KEYS.GOALS, JSON.stringify(goals));
+    localStorage.setItem(KEYS.TRANSACTIONS, JSON.stringify(txs));
+    return true;
   },
-
-  saveAllocationConfig: (config: AllocationSetting[]) => {
-    localStorage.setItem(KEYS.ALLOCATION_CONFIG, JSON.stringify(config));
-  },
-
-  // --- AUTO DEDUCT CONFIG ---
-  getAutoDeductPercent: (): number => {
-    const data = localStorage.getItem(KEYS.AUTO_DEDUCT_PERCENT);
-    return data ? Number(data) : 10; // Default 10%
-  },
-
-  setAutoDeductPercent: (percent: number) => {
-    localStorage.setItem(KEYS.AUTO_DEDUCT_PERCENT, String(percent));
-  },
-
-  getAutoDeductEnabled: (): boolean => {
-    const data = localStorage.getItem(KEYS.AUTO_DEDUCT_ENABLED);
-    return data === 'true'; // Default false if not set
-  },
-
-  setAutoDeductEnabled: (enabled: boolean) => {
-    localStorage.setItem(KEYS.AUTO_DEDUCT_ENABLED, String(enabled));
-  }
+  getAutoDeductPercent: (): number => Number(localStorage.getItem(KEYS.AUTO_DEDUCT_PERCENT) || '10'),
+  setAutoDeductPercent: (p: number) => localStorage.setItem(KEYS.AUTO_DEDUCT_PERCENT, String(p)),
+  getAutoDeductEnabled: (): boolean => localStorage.getItem(KEYS.AUTO_DEDUCT_ENABLED) === 'true',
+  setAutoDeductEnabled: (e: boolean) => localStorage.setItem(KEYS.AUTO_DEDUCT_ENABLED, String(e))
 };

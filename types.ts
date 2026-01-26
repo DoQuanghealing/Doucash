@@ -76,7 +76,9 @@ export interface Goal {
 export interface Milestone {
   id: string;
   title: string;
-  date: string; // Date for specific session/task
+  startDate?: string;
+  date: string; // Expected completion date/Deadline
+  completedAt?: string; // Actual time of completion
   isCompleted: boolean;
 }
 

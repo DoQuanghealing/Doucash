@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Wallet, Transaction, TransactionType, User } from '../types';
-import { ArrowUpRight, ArrowDownRight, RefreshCw, Wallet as WalletIcon, Settings, Calendar, List, User as UserIcon, ShieldCheck, CheckCircle2, TrendingUp, AlertTriangle, Target, Zap, X } from 'lucide-react';
+import { ArrowUpRight, ArrowDownRight, Wallet as WalletIcon, Settings, Calendar, List, ShieldCheck, TrendingUp, AlertTriangle, Target, Zap, X, Sparkles, ArrowRightLeft, MoveRight } from 'lucide-react';
 import { CATEGORY_COLORS } from '../constants';
 import { VI } from '../constants/vi';
 import { formatVND } from '../utils/format';
@@ -12,357 +12,308 @@ interface Props {
   transactions: Transaction[];
   users: User[];
   onOpenSettings: () => void;
+  onRefresh: () => void;
 }
 
-export const Dashboard: React.FC<Props> = ({ wallets, transactions, users, onOpenSettings }) => {
+export const Dashboard: React.FC<Props> = ({ wallets, transactions, users, onOpenSettings, onRefresh }) => {
   const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
   const [activeWalletTab, setActiveWalletTab] = useState<'main' | 'backup'>('main');
-  
-  // Auto Deduct State (for Backup Tab)
-  const [autoDeductPercent, setAutoDeductPercent] = useState(0);
-  const [autoDeductEnabled, setAutoDeductEnabled] = useState(false);
-
-  // Mission Modal State
   const [showMissionModal, setShowMissionModal] = useState(false);
+  const [showTransferModal, setShowTransferModal] = useState(false);
+  const [transferAmount, setTransferAmount] = useState('');
   const [missions, setMissions] = useState<any[]>([]);
 
   useEffect(() => {
-    setAutoDeductPercent(StorageService.getAutoDeductPercent());
-    setAutoDeductEnabled(StorageService.getAutoDeductEnabled());
     calculateMissions();
-  }, [transactions]); // Recalculate missions when transactions change
-
-  const handleSaveAutoDeduct = (percent: number, enabled: boolean) => {
-      setAutoDeductPercent(percent);
-      setAutoDeductEnabled(enabled);
-      StorageService.setAutoDeductPercent(percent);
-      StorageService.setAutoDeductEnabled(enabled);
-  };
+  }, [transactions]);
 
   const totalBalance = wallets.reduce((acc, w) => acc + w.balance, 0);
+  const mainWallet = wallets.find(w => w.id === 'w1') || wallets[0];
+  const backupWallet = wallets.find(w => w.id === 'w2');
 
-  // Today's Stats Logic
-  const today = new Date().toDateString();
-  const todayTransactions = transactions.filter(t => new Date(t.date).toDateString() === today);
+  const currentMonth = new Date().getMonth();
+  const currentYear = new Date().getFullYear();
   
-  const todayIncome = todayTransactions
-    .filter(t => t.type === TransactionType.INCOME)
-    .reduce((sum, t) => sum + t.amount, 0);
-    
-  const todayExpense = todayTransactions
-    .filter(t => t.type === TransactionType.EXPENSE || t.type === TransactionType.TRANSFER)
-    .reduce((sum, t) => sum + t.amount, 0);
-
-  // Status & Praise Logic
   const monthlyIncome = transactions
-    .filter(t => t.type === TransactionType.INCOME && new Date(t.date).getMonth() === new Date().getMonth())
+    .filter(t => t.type === TransactionType.INCOME && 
+            new Date(t.date).getMonth() === currentMonth && 
+            new Date(t.date).getFullYear() === currentYear)
     .reduce((sum, t) => sum + t.amount, 0);
-  const monthlyExpense = transactions
-    .filter(t => t.type === TransactionType.EXPENSE && new Date(t.date).getMonth() === new Date().getMonth())
-    .reduce((sum, t) => sum + t.amount, 0);
-  
-  let statusIcon = <TrendingUp size={24} className="text-emerald-400" />;
-  let statusMessage = VI.dashboard.encouragement.status.good;
-  
-  if (monthlyExpense > monthlyIncome && monthlyIncome > 0) {
-      statusIcon = <AlertTriangle size={24} className="text-red-400" />;
-      statusMessage = VI.dashboard.encouragement.status.danger;
-  } else if (monthlyExpense > monthlyIncome * 0.8) {
-      statusIcon = <AlertTriangle size={24} className="text-amber-400" />;
-      statusMessage = VI.dashboard.encouragement.status.warning;
-  } else if (monthlyIncome > monthlyExpense * 2) {
-      statusIcon = <Zap size={24} className="text-yellow-400" />;
-      statusMessage = VI.dashboard.encouragement.status.great;
-  }
 
-  // Calculate Missions
+  const monthlyExpense = transactions
+    .filter(t => t.type === TransactionType.EXPENSE && 
+            new Date(t.date).getMonth() === currentMonth && 
+            new Date(t.date).getFullYear() === currentYear)
+    .reduce((sum, t) => sum + t.amount, 0);
+
   const calculateMissions = () => {
       const ms = [];
-      
-      // 1. Projects
       const projects = StorageService.getIncomeProjects();
       projects.filter(p => p.status === 'in_progress').forEach(p => {
           const incomplete = p.milestones.filter(m => !m.isCompleted).length;
           if (incomplete > 0) {
-              ms.push({
-                  type: 'project',
-                  text: `${VI.dashboard.encouragement.missions.projectPrefix} ${incomplete} ${VI.dashboard.encouragement.missions.projectSuffix} "${p.name}" ${VI.dashboard.encouragement.missions.projectEarn} ${formatVND(p.expectedIncome)}`
-              });
+              ms.push({ type: 'project', text: `${VI.insights.project.status.in_progress}: ${incomplete} đầu việc trong "${p.name}"` });
           }
       });
-
-      // 2. Fixed Costs
-      const costs = StorageService.getFixedCosts();
-      costs.forEach(c => {
-          const needed = c.amount - c.allocatedAmount;
-          if (needed > 0) {
-              ms.push({
-                  type: 'cost',
-                  text: `${VI.dashboard.encouragement.missions.costNeeded} ${formatVND(needed)} ${VI.dashboard.encouragement.missions.for} "${c.title}"`,
-                  sub: `${VI.dashboard.encouragement.missions.deadline} ${new Date(c.nextDueDate).toLocaleDateString('vi-VN')}`
-              });
-          }
-      });
-
       setMissions(ms);
   };
 
-  // Recent Activity List Logic
+  const handleQuickTransfer = (e: React.FormEvent) => {
+    e.preventDefault();
+    const amount = parseFloat(transferAmount);
+    if (!amount || amount <= 0) return;
+    
+    const success = StorageService.transferFunds('w1', 'w2', amount, 'Trích lập quỹ thủ công');
+    if (success) {
+      setTransferAmount('');
+      setShowTransferModal(false);
+      onRefresh();
+    } else {
+      alert("Số dư Ví chính không đủ!");
+    }
+  };
+
   const recentTransactions = transactions
     .sort((a, b) => b.timestamp - a.timestamp)
     .slice(0, 5);
 
-  const mainWallet = wallets.find(w => w.id === 'w1') || wallets[0];
-  const backupWallet = wallets.find(w => w.id === 'w2');
+  const getDynamicFontSizeClass = (balance: number, isHeader = false) => {
+    const str = formatVND(balance);
+    const len = str.length;
+    
+    if (isHeader) {
+      if (len > 16) return 'text-xl';
+      if (len > 13) return 'text-2xl';
+      if (len > 11) return 'text-3xl';
+      return 'text-4xl';
+    }
+
+    if (len > 16) return 'text-[1.4rem] sm:text-[1.8rem]';
+    if (len > 14) return 'text-[1.8rem] sm:text-[2.2rem]';
+    if (len > 12) return 'text-[2.1rem] sm:text-[2.5rem]';
+    return 'text-[2.5rem] sm:text-[3rem]';
+  };
+
+  const activeBalance = activeWalletTab === 'main' ? mainWallet?.balance || 0 : backupWallet?.balance || 0;
 
   return (
-    <div className="p-4 space-y-6 pt-6">
+    <div className="p-6 space-y-8 pt-12 animate-in fade-in duration-1000">
       
-      {/* Header / Net Worth (Global Family Wealth) */}
-      <div className="flex justify-between items-start px-1">
+      {/* Header Area */}
+      <div className="flex justify-between items-center px-1">
         <div className="space-y-1">
-          <h1 className="text-zinc-400 text-sm font-medium tracking-wide uppercase">{VI.dashboard.netWorth}</h1>
-          <div className="flex items-baseline space-x-2">
-            <span className="text-3xl font-bold text-white tracking-tight">{formatVND(totalBalance)}</span>
+          <h1 className="text-foreground/40 text-[10px] font-black tracking-[0.3em] uppercase">QUẢN TRỊ TÀI CHÍNH</h1>
+          <div className={`font-[900] text-foreground tracking-tighter filter drop-shadow-sm transition-all duration-300 ${getDynamicFontSizeClass(totalBalance, true)}`}>
+            {formatVND(totalBalance)}
           </div>
         </div>
         <button 
           onClick={onOpenSettings}
-          className="p-3 bg-white/5 rounded-full hover:bg-white/10 text-zinc-400 hover:text-white transition-colors border border-white/5"
+          className="p-4 glass-card rounded-[1.5rem] text-primary hover:bg-primary/10 transition-all active:scale-90 border-0"
         >
-          <Settings size={20} />
+          <Settings size={22} className="animate-[spin_10s_linear_infinite]" />
         </button>
       </div>
 
-      {/* Wallet Tabs */}
-      <div>
-          <div className="flex p-1 bg-black/30 rounded-xl border border-white/5 mb-4">
-              <button 
-                onClick={() => setActiveWalletTab('main')}
-                className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all flex items-center justify-center gap-2 ${activeWalletTab === 'main' ? 'bg-surfaceHighlight text-white shadow' : 'text-zinc-500'}`}
-              >
-                  <WalletIcon size={16} /> {mainWallet?.name || VI.dashboard.tabs.main}
-              </button>
-              <button 
-                onClick={() => setActiveWalletTab('backup')}
-                className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all flex items-center justify-center gap-2 ${activeWalletTab === 'backup' ? 'bg-surfaceHighlight text-emerald-400 shadow' : 'text-zinc-500'}`}
-              >
-                  <ShieldCheck size={16} /> {backupWallet?.name || VI.dashboard.tabs.backup}
-              </button>
-          </div>
-
-          {activeWalletTab === 'main' ? (
-               /* Main Wallet Card */
-               <div className="border border-white/5 rounded-3xl p-6 shadow-xl relative overflow-hidden bg-gradient-to-br from-surfaceHighlight to-surface">
-                    <div className="absolute -right-10 -top-10 w-40 h-40 rounded-full blur-2xl bg-primary/10 pointer-events-none"></div>
-                    <div className="relative z-10">
-                        <div className="flex items-center space-x-3 mb-4">
-                            <div className="p-2.5 rounded-xl bg-black/30 text-primary">
-                                <WalletIcon size={20} />
-                            </div>
-                            <span className="font-bold text-white text-lg">{mainWallet?.name}</span>
-                        </div>
-                        <p className="text-zinc-400 text-xs mb-1 font-medium tracking-wide uppercase">{VI.dashboard.availableBalance}</p>
-                        <p className="text-4xl font-bold text-white tracking-tight">{formatVND(mainWallet?.balance || 0)}</p>
-                    </div>
-               </div>
-          ) : (
-               /* Backup Wallet Card & Settings */
-               <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-300">
-                    <div className="border border-emerald-500/20 rounded-3xl p-6 shadow-xl relative overflow-hidden bg-gradient-to-br from-zinc-800 to-black">
-                        <div className="absolute -right-10 -top-10 w-40 h-40 rounded-full blur-2xl bg-emerald-500/10 pointer-events-none"></div>
-                        <div className="relative z-10">
-                            <div className="flex items-center space-x-3 mb-4">
-                                <div className="p-2.5 rounded-xl bg-emerald-500/20 text-emerald-400">
-                                    <ShieldCheck size={20} />
-                                </div>
-                                <span className="font-bold text-white text-lg">{backupWallet?.name || "Quỹ dự phòng"}</span>
-                            </div>
-                            <p className="text-zinc-400 text-xs mb-1 font-medium tracking-wide uppercase">{VI.dashboard.availableBalance}</p>
-                            <p className="text-4xl font-bold text-emerald-400 tracking-tight">{formatVND(backupWallet?.balance || 0)}</p>
-                        </div>
-                    </div>
-
-                    {/* Auto Deduct Config Block */}
-                    <div className="bg-emerald-900/10 border border-emerald-500/10 rounded-2xl p-4">
-                        <div className="flex justify-between items-center mb-3">
-                            <h3 className="text-sm font-bold text-emerald-400">{VI.dashboard.backup.configTitle}</h3>
-                            <button 
-                                onClick={() => handleSaveAutoDeduct(autoDeductPercent, !autoDeductEnabled)}
-                                className={`text-xs px-3 py-1.5 rounded-full font-bold transition-all ${autoDeductEnabled ? 'bg-emerald-500 text-white' : 'bg-white/10 text-zinc-500'}`}
-                            >
-                                {autoDeductEnabled ? VI.dashboard.backup.on : VI.dashboard.backup.off}
-                            </button>
-                        </div>
-                        
-                        <p className="text-xs text-zinc-500 mb-4">{VI.dashboard.backup.desc}</p>
-                        
-                        <div className={`space-y-2 transition-opacity ${autoDeductEnabled ? 'opacity-100' : 'opacity-40 pointer-events-none'}`}>
-                            <div className="flex justify-between text-xs text-zinc-400 font-medium">
-                                <span>{VI.dashboard.backup.autoLabel}</span>
-                                <span className="text-white">{autoDeductPercent}%</span>
-                            </div>
-                            <input 
-                                type="range" 
-                                min="0" 
-                                max="50" 
-                                step="1"
-                                value={autoDeductPercent}
-                                onChange={(e) => handleSaveAutoDeduct(Number(e.target.value), autoDeductEnabled)}
-                                className="w-full h-1.5 bg-black/40 rounded-lg appearance-none cursor-pointer accent-emerald-500"
-                            />
-                        </div>
-                    </div>
-               </div>
-          )}
-      </div>
-
-      {/* Encouragement & Mission Block */}
-      <div className="bg-surface border border-white/10 rounded-3xl p-5 flex items-center justify-between relative overflow-hidden">
-          {/* Decorative Gradient Line */}
-          <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-primary via-emerald-500 to-amber-500 opacity-50"></div>
-          
-          <div className="flex-1">
-              <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1">{VI.dashboard.encouragement.title}</h3>
-              <div className="flex items-center gap-2">
-                  {statusIcon}
-                  <span className="text-sm font-bold text-white leading-tight max-w-[150px]">{statusMessage}</span>
+      {/* Floating Gradient Wallet with Liquid Tab Switcher */}
+      <div className="space-y-6">
+          <div className="p-1.5 glass-card bg-gradient-to-r from-primary/20 via-surface/40 to-secondary/20 rounded-[2rem] shadow-2xl border-0">
+              <div className="flex relative">
+                  <button 
+                    onClick={() => setActiveWalletTab('main')}
+                    className={`relative z-10 flex-1 py-4 text-[11px] font-black rounded-[1.5rem] transition-all uppercase tracking-[0.2em] flex items-center justify-center gap-3 ${activeWalletTab === 'main' ? 'bg-primary text-white shadow-xl neon-glow-primary' : 'text-foreground/40 hover:text-foreground/60'}`}
+                  >
+                      <WalletIcon size={14} /> {mainWallet?.name?.toUpperCase() || 'VÍ CHÍNH'}
+                  </button>
+                  <button 
+                    onClick={() => setActiveWalletTab('backup')}
+                    className={`relative z-10 flex-1 py-4 text-[11px] font-black rounded-[1.5rem] transition-all uppercase tracking-[0.2em] flex items-center justify-center gap-3 ${activeWalletTab === 'backup' ? 'bg-secondary text-white shadow-xl neon-glow-secondary' : 'text-foreground/40 hover:text-foreground/60'}`}
+                  >
+                      <ShieldCheck size={14} /> {backupWallet?.name?.toUpperCase() || "DỰ PHÒNG"}
+                  </button>
               </div>
           </div>
-          
-          <button 
-            onClick={() => setShowMissionModal(true)}
-            className="flex items-center gap-2 bg-white/10 hover:bg-white/20 text-white px-4 py-3 rounded-xl font-bold text-sm transition-all active:scale-95 border border-white/5"
-          >
-              <Target size={18} className="text-primary" />
-              <span>{VI.dashboard.encouragement.btnMission}</span>
-              {missions.length > 0 && (
-                  <span className="w-5 h-5 rounded-full bg-red-500 text-white text-[10px] flex items-center justify-center -ml-1">
-                      {missions.length}
-                  </span>
-              )}
-          </button>
+
+          <div className={`glass-card liquid-glass rounded-[3rem] p-10 relative overflow-hidden group transition-all duration-700 border-0 shadow-2xl ${activeWalletTab === 'main' ? 'bg-gradient-to-br from-primary/20 via-surface/60 to-primary/5' : 'bg-gradient-to-br from-secondary/20 via-surface/60 to-secondary/5'}`}>
+               <div className={`absolute -right-16 -top-16 w-80 h-80 rounded-full blur-[100px] opacity-40 group-hover:opacity-60 transition-opacity ${activeWalletTab === 'main' ? 'bg-primary/30' : 'bg-secondary/30'}`}></div>
+               
+               <div className="relative z-10">
+                    <p className="text-foreground/30 text-[11px] mb-2 font-black tracking-widest uppercase">SỐ DƯ QUẢN LÝ</p>
+                    <p className={`font-[900] tracking-tighter mb-10 leading-tight transition-all duration-500 truncate ${activeWalletTab === 'backup' ? 'text-secondary' : 'text-foreground'} ${getDynamicFontSizeClass(activeBalance)}`}>
+                        {formatVND(activeBalance)}
+                    </p>
+                    
+                    {/* Action Area for Transfer */}
+                    {activeWalletTab === 'main' && (
+                      <button 
+                        onClick={() => setShowTransferModal(true)}
+                        className="mb-8 flex items-center gap-3 bg-foreground/5 hover:bg-foreground/10 text-foreground/40 hover:text-primary px-6 py-3 rounded-2xl transition-all border border-foreground/5 font-black text-[10px] uppercase tracking-widest"
+                      >
+                        <ArrowRightLeft size={16} /> TRÍCH LẬP QUỸ DỰ PHÒNG
+                      </button>
+                    )}
+
+                    {/* Vertical Stacked Cards for Income/Spending */}
+                    <div className="flex flex-col gap-4">
+                        <div className="glass-card bg-surface/50 p-6 rounded-[2.25rem] border-0 flex justify-between items-center group/card hover:bg-secondary/5 transition-all">
+                            <div>
+                                <span className="text-[10px] text-foreground/40 block font-black uppercase mb-1 tracking-[0.2em]">Tổng thu tháng</span>
+                                <span className="text-secondary text-2xl font-[900] tracking-tight">{formatVND(monthlyIncome)}</span>
+                            </div>
+                            <div className="w-14 h-14 rounded-2xl bg-secondary/10 text-secondary flex items-center justify-center shadow-inner group-hover/card:scale-110 group-hover/card:rotate-6 transition-transform">
+                                <TrendingUp size={24} />
+                            </div>
+                        </div>
+                        <div className="glass-card bg-surface/50 p-6 rounded-[2.25rem] border-0 flex justify-between items-center group/card hover:bg-danger/5 transition-all">
+                            <div>
+                                <span className="text-[10px] text-foreground/40 block font-black uppercase mb-1 tracking-[0.2em]">Tổng chi tháng</span>
+                                <span className="text-danger text-2xl font-[900] tracking-tight">{formatVND(monthlyExpense)}</span>
+                            </div>
+                            <div className="w-14 h-14 rounded-2xl bg-danger/10 text-danger flex items-center justify-center shadow-inner group-hover/card:scale-110 group-hover/card:rotate-[-6deg] transition-transform">
+                                <AlertTriangle size={24} />
+                            </div>
+                        </div>
+                    </div>
+               </div>
+          </div>
       </div>
 
-      {/* Daily Summary Widget */}
-      <div className="bg-surface border border-white/5 rounded-3xl p-5 shadow-lg relative">
-        <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-3">{VI.dashboard.todaySummary}</h3>
-        <div className="flex space-x-6">
-            <div>
-                <span className="text-xs text-emerald-500 block mb-0.5">{VI.dashboard.income}</span>
-                <span className="text-lg font-bold text-white">{formatVND(todayIncome)}</span>
-            </div>
-            <div className="w-px bg-white/10 h-10"></div>
-            <div>
-                <span className="text-xs text-danger block mb-0.5">{VI.dashboard.expense}</span>
-                <span className="text-lg font-bold text-white">{formatVND(todayExpense)}</span>
-            </div>
+      {/* QUICK TRANSFER MODAL */}
+      {showTransferModal && (
+        <div className="fixed inset-0 z-[220] flex items-end sm:items-center justify-center bg-black/80 backdrop-blur-3xl p-6 animate-in fade-in duration-300">
+           <div className="glass-card w-full max-w-md rounded-[3rem] p-10 shadow-2xl animate-in slide-in-from-bottom duration-500 border-0 bg-surface">
+               <div className="flex justify-between items-center mb-8">
+                   <div>
+                        <h3 className="text-2xl font-[900] text-foreground tracking-tighter uppercase leading-none">TRÍCH LẬP QUỸ</h3>
+                        <p className="text-[10px] font-black text-foreground/30 uppercase tracking-widest mt-2">Ví chính → Quỹ dự phòng</p>
+                   </div>
+                   <button onClick={() => setShowTransferModal(false)} className="p-3 bg-foreground/5 rounded-2xl text-foreground/40 hover:bg-foreground/10 transition-all"><X size={22} /></button>
+               </div>
+               <form onSubmit={handleQuickTransfer} className="space-y-8">
+                   <div className="space-y-4">
+                      <div className="space-y-2">
+                          <label className="text-[10px] font-black text-foreground/30 ml-2 tracking-widest uppercase">Số tiền chuyển (VND)</label>
+                          <input 
+                              type="number" required autoFocus
+                              className="w-full bg-foreground/5 text-secondary text-3xl font-[900] p-6 rounded-[2rem] focus:outline-none tracking-tighter placeholder:text-foreground/5"
+                              placeholder="0"
+                              value={transferAmount}
+                              onChange={(e) => setTransferAmount(e.target.value)}
+                          />
+                          <div className="flex justify-between px-2 text-[9px] font-black text-foreground/20 uppercase tracking-widest">
+                            <span>Khả dụng: {formatVND(mainWallet.balance)}</span>
+                            <button type="button" onClick={() => setTransferAmount(String(mainWallet.balance))} className="text-primary hover:underline">Tất cả</button>
+                          </div>
+                      </div>
+                   </div>
+
+                   <button type="submit" className="w-full bg-primary text-white font-[900] py-6 rounded-[2rem] text-[11px] uppercase tracking-[0.3em] shadow-xl neon-glow-primary active:scale-95 transition-all flex items-center justify-center gap-3">
+                       XÁC NHẬN CHUYỂN <MoveRight size={18} />
+                   </button>
+               </form>
+           </div>
         </div>
+      )}
+
+      {/* AI Mission Box with Liquid Glass */}
+      <div className="glass-card liquid-glass rounded-[2.5rem] p-3 bg-gradient-to-r from-primary/10 via-surface/80 to-secondary/10 border-0 shadow-xl">
+          <div className="flex items-center justify-between p-5">
+              <div className="flex items-center gap-5">
+                  <div className="w-14 h-14 rounded-[1.25rem] bg-primary flex items-center justify-center text-white neon-glow-primary transform rotate-3">
+                      <Zap size={28} fill="white" />
+                  </div>
+                  <div>
+                      <h3 className="text-[10px] font-black text-foreground/40 uppercase tracking-[0.3em]">AI Insight</h3>
+                      <p className="text-[15px] font-[900] text-foreground uppercase tracking-tight">{missions.length} VIỆC CẦN LÀM</p>
+                  </div>
+              </div>
+              <button 
+                onClick={() => setShowMissionModal(true)}
+                className="bg-primary hover:bg-primary/90 text-white px-7 py-4 rounded-[1.5rem] font-[900] text-[10px] uppercase tracking-[0.3em] active:scale-95 transition-all shadow-xl neon-glow-primary"
+              >
+                  XỬ LÝ
+              </button>
+          </div>
       </div>
 
-      {/* Activity / Calendar Toggle Section */}
-      <div className="bg-surface rounded-3xl border border-white/5 overflow-hidden">
-        <div className="p-5 border-b border-white/5 flex justify-between items-center">
-            <h3 className="font-bold text-white">
-                {viewMode === 'list' ? VI.dashboard.recentActivity : VI.dashboard.viewMode.calendar}
-            </h3>
-            <div className="flex bg-black/20 rounded-lg p-1">
-                <button 
-                    onClick={() => setViewMode('list')}
-                    className={`p-1.5 rounded-md transition-all ${viewMode === 'list' ? 'bg-white/10 text-white shadow-sm' : 'text-zinc-500'}`}
-                >
-                    <List size={16} />
-                </button>
-                <button 
-                    onClick={() => setViewMode('calendar')}
-                    className={`p-1.5 rounded-md transition-all ${viewMode === 'calendar' ? 'bg-white/10 text-white shadow-sm' : 'text-zinc-500'}`}
-                >
-                    <Calendar size={16} />
-                </button>
+      {/* Recent Activity Card */}
+      <div className="glass-card rounded-[2.5rem] overflow-hidden border-0 shadow-xl">
+        <div className="p-7 border-b border-foreground/5 flex justify-between items-center bg-foreground/[0.02]">
+            <h3 className="font-black text-[10px] uppercase tracking-[0.2em] text-foreground/40">NHẬT KÝ DỮ LIỆU</h3>
+            <div className="flex glass-card p-1.5 rounded-2xl bg-foreground/5 border-0">
+                <button onClick={() => setViewMode('list')} className={`p-2.5 rounded-xl transition-all ${viewMode === 'list' ? 'bg-primary text-white neon-glow-primary' : 'text-foreground/30'}`}><List size={18} /></button>
+                <button onClick={() => setViewMode('calendar')} className={`p-2.5 rounded-xl transition-all ${viewMode === 'calendar' ? 'bg-primary text-white neon-glow-primary' : 'text-foreground/30'}`}><Calendar size={18} /></button>
             </div>
         </div>
         
-        <div className="min-h-[300px]">
+        <div className="min-h-[300px] p-4">
             {viewMode === 'list' ? (
-                <div>
-                    {recentTransactions.map((tx) => (
-                        <div key={tx.id} className="flex items-center justify-between p-4 hover:bg-white/5 transition-colors border-b border-white/5 last:border-0">
-                            <div className="flex items-center space-x-4">
+                <div className="space-y-2">
+                    {recentTransactions.length > 0 ? recentTransactions.map((tx) => (
+                        <div key={tx.id} className="flex items-center justify-between p-5 rounded-[1.75rem] hover:bg-foreground/[0.04] transition-all group active:scale-[0.98]">
+                            <div className="flex items-center space-x-5">
                                 <div 
-                                    className="w-10 h-10 rounded-full flex items-center justify-center text-white shadow-sm"
-                                    style={{ backgroundColor: tx.type === TransactionType.INCOME ? '#10b981' : CATEGORY_COLORS[tx.category] || '#64748b' }}
+                                    className="w-14 h-14 rounded-[1.25rem] flex items-center justify-center text-white transition-all group-hover:rotate-6 shadow-lg"
+                                    style={{ 
+                                        background: tx.type === TransactionType.INCOME 
+                                          ? 'linear-gradient(135deg, #10b981, #064e3b)' 
+                                          : tx.type === TransactionType.TRANSFER 
+                                            ? 'linear-gradient(135deg, #8b5cf6, #4c1d95)'
+                                            : `linear-gradient(135deg, ${CATEGORY_COLORS[tx.category] || '#64748b'}, #00000044)`,
+                                    }}
                                 >
-                                    {tx.type === TransactionType.INCOME ? <ArrowUpRight size={18} /> : 
-                                     tx.type === TransactionType.TRANSFER ? <RefreshCw size={16} /> :
-                                     <ArrowDownRight size={18} />}
+                                    {tx.type === TransactionType.INCOME ? <ArrowUpRight size={22} strokeWidth={3} /> : tx.type === TransactionType.TRANSFER ? <ArrowRightLeft size={22} strokeWidth={3} /> : <ArrowDownRight size={22} strokeWidth={3} />}
                                 </div>
                                 <div>
-                                    <p className="font-semibold text-zinc-200 text-sm">{tx.description}</p>
-                                    <p className="text-xs text-zinc-500">{new Date(tx.date).toLocaleDateString()} • {VI.category[tx.category] || tx.category}</p>
+                                    <p className="font-[900] text-foreground text-[14px] uppercase tracking-tight">{tx.description}</p>
+                                    <p className="text-[10px] text-foreground/40 font-bold tracking-[0.1em] uppercase">
+                                        {tx.type === TransactionType.TRANSFER ? 'Chuyển khoản' : (VI.category[tx.category] || tx.category)}
+                                    </p>
                                 </div>
                             </div>
-                            <span className={`font-mono font-medium text-sm ${tx.type === TransactionType.INCOME ? 'text-emerald-400' : 'text-zinc-100'}`}>
-                                {tx.type === TransactionType.INCOME ? '+' : '-'}{formatVND(tx.amount)}
+                            <span className={`font-[900] text-[16px] tracking-tighter ${tx.type === TransactionType.INCOME ? 'text-secondary' : tx.type === TransactionType.TRANSFER ? 'text-primary' : 'text-foreground'}`}>
+                                {tx.type === TransactionType.INCOME ? '+' : tx.type === TransactionType.TRANSFER ? '⇄' : '-'}{formatVND(tx.amount)}
                             </span>
                         </div>
-                    ))}
-                    {recentTransactions.length === 0 && (
-                        <div className="p-8 text-center text-zinc-500 text-sm">{VI.dashboard.noTransactions}</div>
-                    )}
-                    {recentTransactions.length > 0 && (
-                         <div className="p-3 text-center border-t border-white/5">
-                             <button className="text-xs text-primary font-medium">{VI.dashboard.viewAll}</button>
-                         </div>
+                    )) : (
+                        <div className="py-20 text-center text-foreground/20 font-black uppercase text-xs tracking-widest">TRỐNG</div>
                     )}
                 </div>
             ) : (
-                <div className="p-2">
-                    <CalendarView transactions={transactions} />
-                </div>
+                <div className="p-2"><CalendarView transactions={transactions} /></div>
             )}
         </div>
       </div>
 
       {/* MISSION MODAL */}
       {showMissionModal && (
-          <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center bg-black/80 backdrop-blur-md">
-              <div className="bg-surface w-full max-w-md rounded-t-3xl sm:rounded-3xl p-6 border border-white/10 shadow-2xl animate-in slide-in-from-bottom duration-300 max-h-[80vh] overflow-y-auto">
-                  <div className="flex justify-between items-center mb-6">
-                       <div className="flex items-center gap-2">
-                           <Target size={24} className="text-primary" />
-                           <h3 className="text-xl font-bold text-white">{VI.dashboard.encouragement.modalTitle}</h3>
+          <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center bg-black/80 backdrop-blur-3xl p-6 animate-in fade-in duration-500">
+              <div className="glass-card w-full max-w-md rounded-[3rem] p-10 shadow-2xl animate-in slide-in-from-bottom duration-500 border-0">
+                  <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-primary via-indigo-500 to-secondary"></div>
+                  <div className="flex justify-between items-center mb-10">
+                       <div>
+                           <h3 className="text-2xl font-[900] text-foreground tracking-tighter uppercase">TRUNG TÂM TÁC VỤ</h3>
+                           <p className="text-[10px] font-black text-foreground/30 uppercase tracking-[0.3em]">AI Analytics v2.8</p>
                        </div>
-                       <button onClick={() => setShowMissionModal(false)} className="p-2 bg-white/5 rounded-full">
-                           <X size={20} />
-                       </button>
+                       <button onClick={() => setShowMissionModal(false)} className="p-3 glass-card rounded-2xl text-foreground/20 hover:text-primary transition-colors border-0"><X size={24} /></button>
                   </div>
-                  
-                  <div className="space-y-3">
-                      {missions.length === 0 && (
-                          <div className="text-center py-8 text-zinc-500">
-                              <CheckCircle2 size={48} className="mx-auto mb-3 opacity-30 text-emerald-500" />
-                              <p>{VI.dashboard.encouragement.missions.empty}</p>
+                  <div className="space-y-5 mb-10">
+                      {missions.length > 0 ? missions.map((m, idx) => (
+                          <div key={idx} className="glass-card bg-surface/40 p-6 rounded-[2rem] border-0 flex items-center gap-6 group hover:bg-primary/5 transition-all">
+                              <div className="w-4 h-4 rounded-full bg-primary neon-glow-primary"></div>
+                              <p className="text-[14px] font-[700] text-foreground/90 leading-relaxed uppercase tracking-tight">{m.text}</p>
+                          </div>
+                      )) : (
+                          <div className="text-center py-16">
+                              <Sparkles size={40} className="mx-auto mb-4 text-secondary/30" />
+                              <p className="text-foreground/30 font-black text-xs uppercase tracking-[0.2em]">Hệ thống rảnh rỗi</p>
                           </div>
                       )}
-                      
-                      {missions.map((m, idx) => (
-                          <div key={idx} className="bg-white/5 p-4 rounded-2xl border border-white/5 flex gap-3">
-                              <div className={`mt-0.5 ${m.type === 'project' ? 'text-indigo-400' : 'text-amber-400'}`}>
-                                  {m.type === 'project' ? <Zap size={18} /> : <AlertTriangle size={18} />}
-                              </div>
-                              <div>
-                                  <p className="text-sm font-medium text-white">{m.text}</p>
-                                  {m.sub && <p className="text-xs text-zinc-500 mt-1">{m.sub}</p>}
-                              </div>
-                          </div>
-                      ))}
                   </div>
-
-                  <button 
-                    onClick={() => setShowMissionModal(false)}
-                    className="w-full bg-white/10 text-white font-bold py-4 rounded-xl mt-6 hover:bg-white/20 transition-colors"
+                  <button onClick={() => setShowMissionModal(false)} 
+                    className="w-full bg-primary text-white font-[900] py-6 rounded-[2rem] text-[11px] uppercase tracking-[0.3em] active:scale-95 transition-all shadow-2xl neon-glow-primary"
                   >
-                      {VI.reflection.received}
+                      XÁC NHẬN
                   </button>
               </div>
           </div>
