@@ -4,9 +4,11 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig(({ mode }) => {
     const env = loadEnv(mode, '.', '');
+    
     return {
-      // 1. THÊM DÒNG NÀY: Quan trọng để nhận diện đúng đường dẫn file trên GitHub Pages
-      base: './', 
+      // Sửa từ './' thành '/ManiCash/' để khớp với tên Repository mới trên GitHub.
+      // Lưu ý: ManiCash phải viết đúng hoa thường như trên GitHub.
+      base: '/ManiCash/', 
       
       server: {
         port: 3000,
@@ -14,19 +16,23 @@ export default defineConfig(({ mode }) => {
       },
       plugins: [react()],
       define: {
+        // Đảm bảo GEMINI_API_KEY đã được thiết lập trong GitHub Secrets
         'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY),
         'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY)
       },
       resolve: {
         alias: {
-          // 2. SỬA LẠI ALIAS: Đảm bảo trỏ đúng vào thư mục hiện tại
+          // Trỏ chính xác vào thư mục root của dự án
           '@': path.resolve(__dirname, './'),
         }
       },
-      // 3. THÊM CẤU HÌNH BUILD (Tùy chọn nhưng nên có)
       build: {
         outDir: 'dist',
         assetsDir: 'assets',
+        // Tắt tính năng minify nếu bạn muốn dễ dàng debug lỗi màn hình trắng (tùy chọn)
+        minify: true,
+        // Đảm bảo tệp tin được build ra với đường dẫn tương đối
+        emptyOutDir: true,
       }
     };
 });
