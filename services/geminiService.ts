@@ -1,18 +1,29 @@
-// SỬA TẠI ĐÂY: Sử dụng đúng tên thư viện @google/generative-ai
-import { GoogleGenerativeAI, SchemaType } from "@google/generative-ai";
+// @ts-ignore
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import { Transaction, User, Goal, IncomeProject, FixedCost, FinancialReport } from '../types';
 
-// Cấu hình Model dựa trên hướng dẫn mới nhất
+// Sử dụng bản ổn định nhất để tránh lỗi trong quá trình build
 const FLASH_MODEL = 'gemini-1.5-flash';
 const PRO_MODEL = 'gemini-1.5-pro';
 
-// SỬA TẠI ĐÂY: Lấy API KEY từ import.meta.env (chuẩn Vite) hoặc process.env (chuẩn Node)
-const API_KEY = import.meta.env.VITE_GEMINI_API_KEY || "";
+/**
+ * SỬA LỖI PROPERTY 'env' DOES NOT EXIST:
+ * Sử dụng ép kiểu (any) và kiểm tra cả hai môi trường Vite/Node
+ */
+const getApiKey = () => {
+  try {
+    const env = (import.meta as any).env;
+    return env?.VITE_GEMINI_API_KEY || (process as any).env?.VITE_GEMINI_API_KEY || "";
+  } catch (e) {
+    return "";
+  }
+};
 
-const genAI = new GoogleGenerativeAI(API_KEY);
+const API_KEY = getApiKey();
+const genAI = API_KEY ? new GoogleGenerativeAI(API_KEY) : null;
 
 export const GeminiService = {
-  isAvailable: () => !!API_KEY,
+  isAvailable: () => !!API_KEY && !!genAI,
 
   generateWeeklyInsight: async (transactions: Transaction[], users: User[]): Promise<string> => {
     if (!GeminiService.isAvailable()) return "AI đang quan sát trong im lặng.";
@@ -53,9 +64,7 @@ export const GeminiService = {
      try {
         const model = genAI.getGenerativeModel({ 
             model: FLASH_MODEL,
-            generationConfig: {
-                responseMimeType: "application/json",
-            }
+            generationConfig: { responseMimeType: "application/json" }
         });
         const prompt = `Tạo một huy hiệu thành tích mỉa mai dựa trên các giao dịch này: ${JSON.stringify(transactions)}. Trả về JSON {title, description}`;
         const result = await model.generateContent(prompt);
@@ -70,9 +79,7 @@ export const GeminiService = {
       try {
           const model = genAI.getGenerativeModel({ 
               model: PRO_MODEL,
-              generationConfig: {
-                  responseMimeType: "application/json",
-              }
+              generationConfig: { responseMimeType: "application/json" }
           });
           const prompt = `Lập kế hoạch thu nhập chi tiết cho ý tưởng: "${idea}". Đơn vị: VND. Ngôn ngữ: Tiếng Việt. Trả về JSON có cấu hình: {name, description, expectedIncome, milestones: [{title, daysFromNow}]}`;
           const result = await model.generateContent(prompt);
@@ -85,11 +92,9 @@ export const GeminiService = {
       try {
           const model = genAI.getGenerativeModel({ 
               model: PRO_MODEL,
-              generationConfig: {
-                  responseMimeType: "application/json",
-              }
+              generationConfig: { responseMimeType: "application/json" }
           });
-          const prompt = `Phân tích sức khỏe tài chính dựa trên dữ liệu giao dịch, mục tiêu và hóa đơn cố định. Trả về JSON FinancialReport gồm: healthScore (0-100), incomeTrend {status, percentage, message}, projectVelocity {rating, completedProjects, message}, goalForecast {canMeetFixedCosts, majorGoalPrediction, advice}. Dữ liệu: ${JSON.stringify({transactions, goals, projects, fixedCosts})}`;
+          const prompt = `Phân tích sức khỏe tài chính dựa trên dữ liệu giao dịch, mục tiêu và hóa đơn cố định. Trả về JSON FinancialReport. Dữ liệu: ${JSON.stringify({transactions, goals, projects, fixedCosts})}`;
           const result = await model.generateContent(prompt);
           return JSON.parse(result.response.text());
       } catch (e) { return null; }
