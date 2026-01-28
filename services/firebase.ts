@@ -1,49 +1,52 @@
 import { initializeApp, getApp, getApps } from "firebase/app";
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "firebase/auth";
-import { getFirestore } from "firebase/firestore"; // BỔ SUNG: Để lưu dữ liệu ví
+import { getFirestore } from "firebase/firestore";
 
-// SỬA TẠI ĐÂY: Ánh xạ trực tiếp từ Environment Variables đã cấu hình
+/** * SỬA LỖI BUILD: Ép kiểu 'import.meta' thành 'any' để TypeScript 
+ * bỏ qua việc kiểm tra thuộc tính 'env' trong lúc build.
+ */
+const metaEnv = (import.meta as any).env;
+
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  appId: import.meta.env.VITE_FIREBASE_APP_ID
+  apiKey: metaEnv?.VITE_FIREBASE_API_KEY || "",
+  authDomain: metaEnv?.VITE_FIREBASE_AUTH_DOMAIN || "",
+  projectId: metaEnv?.VITE_FIREBASE_PROJECT_ID || "",
+  storageBucket: metaEnv?.VITE_FIREBASE_STORAGE_BUCKET || "",
+  messagingSenderId: metaEnv?.VITE_FIREBASE_MESSAGING_SENDER_ID || "",
+  appId: metaEnv?.VITE_FIREBASE_APP_ID || ""
 };
 
 let auth: any = null;
-let db: any = null; // BỔ SUNG: Khai báo database
+let db: any = null;
 let isConfigured = false;
 
 try {
-  // Kiểm tra xem Key đã được nạp từ hệ thống chưa
-  if (firebaseConfig.apiKey && !firebaseConfig.apiKey.includes("YOUR_")) {
+  // Kiểm tra xem Key thực tế đã được nạp chưa
+  if (firebaseConfig.apiKey) {
     const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
     auth = getAuth(app);
-    db = getFirestore(app); // Khởi tạo Firestore
+    db = getFirestore(app);
     isConfigured = true;
   }
 } catch (error) {
-  console.error("Lỗi cấu hình Firebase:", error);
+  console.error("Lỗi khởi tạo Firebase:", error);
 }
 
 const provider = new GoogleAuthProvider();
 provider.setCustomParameters({ prompt: 'select_account' });
 
-// XUẤT CÁC BIẾN: Để các file khác (StorageService) có thể dùng chung
-export { auth, db }; 
+export { auth, db };
 
 export const AuthService = {
   isConfigured: () => isConfigured,
 
   loginWithGoogle: async () => {
-    if (!auth) throw new Error("Hệ thống chưa nhận diện được API Key trên Vercel.");
+    if (!auth) throw new Error("Hệ thống chưa nhận diện được API Key.");
     try {
       const result = await signInWithPopup(auth, provider);
       return result.user;
     } catch (error: any) {
-      console.error("Lỗi đăng nhập Google:", error);
+      console.error("Lỗi đăng nhập:", error);
       throw error;
     }
   },
