@@ -16,16 +16,16 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          # Xóa dòng cache: 'npm' để không bị lỗi khi thiếu package-lock.json
+          # Đã xóa cache để tránh lỗi khi thiếu file lock
 
       - name: Install dependencies
-        # Sử dụng --no-package-lock để cài đặt mượt mà khi file lock bị thiếu
+        # Sử dụng --no-package-lock để cài đặt khi thiếu package-lock.json
         run: npm install --no-package-lock
 
       - name: Build project
-        run: npm run build
+        # Thêm CI=false để bỏ qua các cảnh báo biến môi trường có thể làm dừng quá trình build
+        run: CI=false npm run build
         env:
-          # Các biến này giúp lệnh 'vite build' nhận diện được API trong lúc đóng gói
           VITE_GEMINI_API_KEY: ${{ secrets.VITE_GEMINI_API_KEY }}
           VITE_FIREBASE_API_KEY: ${{ secrets.VITE_FIREBASE_API_KEY }}
           VITE_FIREBASE_AUTH_DOMAIN: ${{ secrets.VITE_FIREBASE_AUTH_DOMAIN }}
@@ -37,6 +37,7 @@ jobs:
       - name: Deploy to Vercel
         uses: amondnet/vercel-action@v20
         with:
+          # Đảm bảo bạn đã đặt tên Secret trên GitHub đúng là VERCEL_TOKEN
           vercel-token: ${{ secrets.VERCEL_TOKEN }}
           vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
           vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
