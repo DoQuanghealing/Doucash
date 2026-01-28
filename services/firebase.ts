@@ -1,78 +1,53 @@
+import path from 'path';
+import { defineConfig, loadEnv } from 'vite';
+import react from '@vitejs/plugin-react';
 
-import { initializeApp, getApp, getApps } from "firebase/app";
-import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged, User as FirebaseUser } from "firebase/auth";
+export default defineConfig(({ mode }) => {
+  // Load tất cả biến môi trường từ .env hoặc GitHub Secrets/Vercel
+  // Tham số thứ 3 là '' để load tất cả biến mà không cần lọc tiền tố VITE_ trong lúc build config
+  const env = loadEnv(mode, process.cwd(), '');
 
-const firebaseConfig = {
-  apiKey: "YOUR_FIREBASE_API_KEY",
-  authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_PROJECT_ID.appspot.com",
-  messagingSenderId: "YOUR_SENDER_ID",
-  appId: "YOUR_APP_ID"
-};
+  return {
+    // Đảm bảo đường dẫn tương đối để không lỗi asset khi deploy
+    base: './', 
 
-let auth: any = null;
-let isConfigured = false;
+    plugins: [react()],
 
-try {
-  if (firebaseConfig.apiKey && firebaseConfig.apiKey !== "YOUR_FIREBASE_API_KEY") {
-    const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
-    auth = getAuth(app);
-    isConfigured = true;
-  }
-} catch (error) {
-  console.error("Lỗi cấu hình Firebase:", error);
-}
+    define: {
+      // Ép kiểu các biến quan trọng thành chuỗi để tránh lỗi 'undefined' trong code
+      'process.env.VITE_FIREBASE_API_KEY': JSON.stringify(env.VITE_FIREBASE_API_KEY),
+      'process.env.VITE_FIREBASE_AUTH_DOMAIN': JSON.stringify(env.VITE_FIREBASE_AUTH_DOMAIN),
+      'process.env.VITE_FIREBASE_PROJECT_ID': JSON.stringify(env.VITE_FIREBASE_PROJECT_ID),
+      'process.env.VITE_FIREBASE_STORAGE_BUCKET': JSON.stringify(env.VITE_FIREBASE_STORAGE_BUCKET),
+      'process.env.VITE_FIREBASE_MESSAGING_SENDER_ID': JSON.stringify(env.VITE_FIREBASE_MESSAGING_SENDER_ID),
+      'process.env.VITE_FIREBASE_APP_ID': JSON.stringify(env.VITE_FIREBASE_APP_ID),
+      'process.env.VITE_GEMINI_API_KEY': JSON.stringify(env.VITE_GEMINI_API_KEY),
+      
+      // Hỗ trợ các thư viện yêu cầu truy cập process.env trực tiếp
+      'process.env': env,
+    },
 
-const provider = new GoogleAuthProvider();
-provider.setCustomParameters({ prompt: 'select_account' });
+    resolve: {
+      alias: {
+        // Cấu hình Alias @ trỏ về thư mục gốc để import file chuẩn xác
+        '@': path.resolve(__dirname, './'),
+      },
+    },
 
-let authChangeCallback: ((user: any) => void) | null = null;
+    build: {
+      outDir: 'dist',
+      assetsDir: 'assets',
+      // Xóa bản build cũ trước khi tạo bản mới
+      emptyOutDir: true,
+      // Tắt sourcemap để bảo mật code và giảm dung lượng bản build
+      sourcemap: false,
+      // Đảm bảo quá trình build không bị dừng bởi các lỗi cảnh báo nhỏ
+      chunkSizeWarningLimit: 1000,
+    },
 
-export const AuthService = {
-  isConfigured: () => isConfigured,
-
-  loginWithGoogle: async () => {
-    if (!auth) {
-      throw new Error("Firebase chưa được cấu hình.");
-    }
-    try {
-      const result = await signInWithPopup(auth, provider);
-      return result.user;
-    } catch (error: any) {
-      console.error("Lỗi đăng nhập Google:", error);
-      throw error;
-    }
-  },
-
-  logout: async () => {
-    if (auth) {
-      try {
-        await signOut(auth);
-      } catch (e) {
-        console.error("Lỗi khi đăng xuất Firebase:", e);
-      }
-    }
-
-    if (authChangeCallback) {
-        authChangeCallback(null);
-    }
-
-    // Force reload để đảm bảo trạng thái ứng dụng được reset hoàn toàn
-    window.location.href = window.location.origin + window.location.pathname;
-  },
-
-  onAuthChange: (callback: (user: any) => void) => {
-    authChangeCallback = callback;
-    
-    if (!auth) {
-      // Nếu Firebase chưa cấu hình, mặc định trả về null ngay lập tức
-      setTimeout(() => callback(null), 10);
-      return () => { authChangeCallback = null; };
-    }
-    
-    return onAuthStateChanged(auth, (user) => {
-      callback(user);
-    });
-  }
-};
+    server: {
+      port: 3000,
+      host: '0.0.0.0',
+    },
+  };
+});
