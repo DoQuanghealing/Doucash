@@ -1,8 +1,10 @@
+
 import React, { useState, useEffect } from 'react';
-import { User, Wallet } from '../types';
+import { User, Wallet, Transaction, IncomeProject } from '../types';
 import { VI } from '../constants/vi';
-import { X, ShieldCheck, Wallet as WalletIcon, Trash2, AlertTriangle, Banknote, Sun, Moon, RefreshCw, Eraser, CheckCircle2 } from 'lucide-react';
+import { X, ShieldCheck, Wallet as WalletIcon, Trash2, AlertTriangle, Banknote, Sun, Moon, RefreshCw, Eraser, CheckCircle2, LogOut, Mail, User as UserIcon, FileSpreadsheet, Download } from 'lucide-react';
 import { StorageService } from '../services/storageService';
+import { AuthService } from '../services/firebase';
 
 interface Props {
   isOpen: boolean;
@@ -11,16 +13,16 @@ interface Props {
   wallets: Wallet[];
   onSave: (updatedUsers: User[], updatedWallets: Wallet[]) => void;
   onRefresh: () => void;
+  currentUser: any; 
 }
 
-export const SettingsModal: React.FC<Props> = ({ isOpen, onClose, users, wallets, onSave, onRefresh }) => {
+export const SettingsModal: React.FC<Props> = ({ isOpen, onClose, users, wallets, onSave, onRefresh, currentUser }) => {
   const [userName, setUserName] = useState('');
   const [mainWalletName, setMainWalletName] = useState('');
   const [mainWalletBalance, setMainWalletBalance] = useState('');
   const [backupWalletName, setBackupWalletName] = useState('');
   const [currentTheme, setCurrentTheme] = useState<'dark' | 'light'>('dark');
   
-  // Custom Confirmation Modal State
   const [confirmType, setConfirmType] = useState<'balance' | 'full' | null>(null);
 
   useEffect(() => {
@@ -52,23 +54,57 @@ export const SettingsModal: React.FC<Props> = ({ isOpen, onClose, users, wallets
     onClose();
   };
 
-  const executeReset = () => {
-    if (confirmType === 'full') {
-        StorageService.resetFull();
-    } else if (confirmType === 'balance') {
-        StorageService.resetBalancesOnly();
+  const handleLogout = async () => {
+    if (confirm("Bạn có chắc chắn muốn đăng xuất?")) {
+      await AuthService.logout();
     }
+  };
+
+  const handleExportCSV = () => {
+    const txs = StorageService.getTransactions();
+    const projects = StorageService.getIncomeProjects();
+    const completedProjects = projects.filter(p => p.status === 'completed');
+
+    // BOM for Excel/Google Sheets UTF-8 support
+    let csvContent = "\uFEFF";
     
-    // Clear confirmation
+    // Section 1: Transactions
+    csvContent += "--- NHẬT KÝ THU CHI ---\n";
+    csvContent += "Ngày,Loại,Danh mục,Số tiền,Mô tả,Ví\n";
+    txs.forEach(tx => {
+      const date = new Date(tx.date).toLocaleDateString('vi-VN');
+      const type = VI.transaction.types[tx.type];
+      const cat = (VI.category as any)[tx.category] || tx.category;
+      const walletName = wallets.find(w => w.id === tx.walletId)?.name || "";
+      csvContent += `${date},${type},${cat},${tx.amount},"${tx.description || ""}",${walletName}\n`;
+    });
+
+    csvContent += "\n";
+    
+    // Section 2: Completed Projects
+    csvContent += "--- DỰ ÁN TĂNG THU NHẬP ĐÃ HOÀN THÀNH ---\n";
+    csvContent += "Tên dự án,Doanh thu thực tế,Ngày hoàn thành,Mô tả\n";
+    completedProjects.forEach(p => {
+      const endDate = p.endDate || "N/A";
+      csvContent += `"${p.name}",${p.expectedIncome},${endDate},"${p.description}"\n`;
+    });
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `Manicash_Report_${new Date().toLocaleDateString('vi-VN')}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const executeReset = () => {
+    if (confirmType === 'full') StorageService.resetFull();
+    else if (confirmType === 'balance') StorageService.resetBalancesOnly();
     setConfirmType(null);
-    
-    // Notify parent to refresh state
     onRefresh();
-    
-    // Close settings
     onClose();
-    
-    // Small feedback to user
     alert("Dữ liệu đã được cập nhật về trạng thái yêu cầu.");
   };
 
@@ -85,19 +121,59 @@ export const SettingsModal: React.FC<Props> = ({ isOpen, onClose, users, wallets
       <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/80 backdrop-blur-3xl px-6 animate-in fade-in duration-300">
         <div className="glass-card w-full max-w-sm rounded-[3rem] border-0 shadow-2xl animate-in zoom-in-95 duration-300 flex flex-col max-h-[85vh] overflow-hidden bg-surface">
           
-          {/* Fixed Header */}
           <div className="flex justify-between items-center p-8 pb-4 shrink-0 relative z-10 bg-surface/50 backdrop-blur-md">
-            <h2 className="text-2xl font-[900] text-foreground tracking-tighter uppercase leading-none">CẤU HÌNH AI</h2>
+            <h2 className="text-2xl font-[1000] text-foreground tracking-tighter uppercase leading-none">CÀI ĐẶT</h2>
             <button onClick={onClose} className="p-3 bg-foreground/5 rounded-2xl hover:bg-foreground/10 text-foreground transition-all">
               <X size={22} />
             </button>
           </div>
 
-          {/* Scrollable Body */}
           <div className="flex-1 overflow-y-auto no-scrollbar px-8 py-4 space-y-10">
+            {/* User Profile Section */}
+            <div className="space-y-4">
+                <h3 className="text-[10px] font-black text-foreground/40 uppercase tracking-[0.3em] ml-2">Tài khoản kết nối</h3>
+                <div className="glass-card bg-foreground/[0.03] p-6 rounded-[2rem] border-0 shadow-inner space-y-4">
+                    <div className="flex items-center gap-4">
+                        <img 
+                          src={currentUser?.photoURL || `https://api.dicebear.com/7.x/avataaars/svg?seed=${currentUser?.displayName}`} 
+                          className="w-12 h-12 rounded-2xl shadow-lg border-2 border-primary/20"
+                          alt="Avatar"
+                        />
+                        <div className="overflow-hidden">
+                            <p className="text-sm font-black text-foreground uppercase tracking-tight truncate">{currentUser?.displayName || 'Người dùng'}</p>
+                            <p className="text-[10px] font-bold text-foreground/30 truncate uppercase">{currentUser?.email || 'Chế độ Demo'}</p>
+                        </div>
+                    </div>
+                    <button 
+                      onClick={handleLogout}
+                      className="w-full py-4 bg-danger/10 text-danger rounded-2xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-danger hover:text-white transition-all"
+                    >
+                        <LogOut size={16} /> Đăng xuất tài khoản
+                    </button>
+                </div>
+            </div>
+
+            {/* Export Section */}
+            <div className="space-y-4">
+                <h3 className="text-[10px] font-black text-foreground/40 uppercase tracking-[0.3em] ml-2">Dữ liệu tài chính</h3>
+                <button
+                  onClick={handleExportCSV}
+                  className="w-full glass-card bg-gradient-to-r from-emerald-500/10 to-secondary/10 p-6 rounded-[2rem] border-0 shadow-inner group flex items-center gap-5 hover:scale-[1.02] active:scale-95 transition-all text-left"
+                >
+                    <div className="w-12 h-12 rounded-2xl bg-secondary text-white flex items-center justify-center shadow-lg neon-glow-secondary">
+                        <FileSpreadsheet size={22} />
+                    </div>
+                    <div>
+                        <p className="text-[11px] font-black text-foreground uppercase tracking-widest leading-none mb-1">{VI.settings.export}</p>
+                        <p className="text-[9px] font-bold text-foreground/30 uppercase tracking-tight">{VI.settings.exportDesc}</p>
+                    </div>
+                    <Download size={16} className="ml-auto text-foreground/20 group-hover:text-secondary transition-colors" />
+                </button>
+            </div>
+
             <form onSubmit={handleSave} id="settings-form" className="space-y-8">
               <div className="space-y-2">
-                <label className="text-[10px] font-black text-foreground/30 ml-2 tracking-widest uppercase">Danh tính</label>
+                <label className="text-[10px] font-black text-foreground/30 ml-2 tracking-widest uppercase">Tên hiển thị nội bộ</label>
                 <div className="flex items-center space-x-4 bg-foreground/5 p-5 rounded-[1.75rem] border border-foreground/5 shadow-inner">
                     <span className="text-3xl filter drop-shadow-lg">{users[0]?.avatar || '😎'}</span>
                     <input
@@ -163,87 +239,43 @@ export const SettingsModal: React.FC<Props> = ({ isOpen, onClose, users, wallets
               </div>
             </form>
 
-            {/* Danger Zone */}
             <div className="pt-10 space-y-4 border-t border-foreground/5">
                 <h3 className="text-[10px] font-black text-danger uppercase tracking-[0.3em] ml-2">Vùng nguy hiểm</h3>
-                
-                <div className="grid grid-cols-1 gap-3">
-                    <button 
-                      type="button"
-                      onClick={() => setConfirmType('balance')}
-                      className="w-full p-6 bg-amber-500/10 hover:bg-amber-500/20 rounded-[2rem] border border-amber-500/20 transition-all flex items-center gap-4 text-left group"
-                    >
-                        <div className="p-3 bg-amber-500/10 rounded-xl text-amber-500 group-hover:rotate-12 transition-transform">
-                            <Eraser size={20} />
-                        </div>
-                        <div>
-                            <p className="text-[11px] font-black text-amber-600 uppercase tracking-widest">Reset số dư & lịch sử</p>
-                            <p className="text-[9px] font-bold text-amber-600/60 uppercase mt-1">Giữ lại các mục tiêu & hạn mức</p>
-                        </div>
+                <div className="grid grid-cols-1 gap-3 pb-6">
+                    <button onClick={() => setConfirmType('balance')} className="w-full p-6 bg-amber-500/10 rounded-[2rem] border border-amber-500/20 flex items-center gap-4">
+                        <div className="p-3 bg-amber-500/10 rounded-xl text-amber-500"><Eraser size={20} /></div>
+                        <div><p className="text-[11px] font-black text-amber-600 uppercase tracking-widest">Reset số dư</p></div>
                     </button>
-
-                    <button 
-                      type="button"
-                      onClick={() => setConfirmType('full')}
-                      className="w-full p-6 bg-danger/10 hover:bg-danger/20 rounded-[2rem] border border-danger/20 transition-all flex items-center gap-4 text-left group"
-                    >
-                        <div className="p-3 bg-danger/10 rounded-xl text-danger group-hover:-rotate-12 transition-transform">
-                            <Trash2 size={20} />
-                        </div>
-                        <div>
-                            <p className="text-[11px] font-black text-danger uppercase tracking-widest">Xóa sạch toàn bộ</p>
-                            <p className="text-[9px] font-bold text-danger/60 uppercase mt-1">Đưa mọi thứ về trạng thái mới</p>
-                        </div>
+                    <button onClick={() => setConfirmType('full')} className="w-full p-6 bg-danger/10 rounded-[2rem] border border-danger/20 flex items-center gap-4">
+                        <div className="p-3 bg-danger/10 rounded-xl text-danger"><Trash2 size={20} /></div>
+                        <div><p className="text-[11px] font-black text-danger uppercase tracking-widest">Xóa sạch toàn bộ</p></div>
                     </button>
                 </div>
             </div>
           </div>
 
-          {/* Fixed Footer */}
           <div className="p-8 pt-4 bg-surface/50 backdrop-blur-md shrink-0">
               <button
                   type="submit"
                   form="settings-form"
-                  className="w-full bg-primary text-white font-[900] py-6 rounded-[2rem] text-[11px] uppercase tracking-[0.4em] shadow-2xl neon-glow-primary active:scale-95 transition-all"
+                  className="w-full bg-primary text-white font-[1000] py-6 rounded-[2rem] text-[12px] uppercase tracking-[0.4em] shadow-2xl neon-glow-primary active:scale-95 transition-all"
               >
-                  CẬP NHẬT THAY ĐỔI
+                  LƯU THAY ĐỔI
               </button>
           </div>
         </div>
       </div>
 
-      {/* CUSTOM CONFIRMATION MODAL */}
       {confirmType && (
         <div className="fixed inset-0 z-[250] flex items-center justify-center bg-black/95 backdrop-blur-xl px-8 animate-in zoom-in-95 duration-300">
-           <div className="glass-card w-full max-w-sm rounded-[2.5rem] p-10 border-2 border-danger/20 shadow-[0_0_100px_rgba(255,0,0,0.2)]">
+           <div className="glass-card w-full max-sm rounded-[2.5rem] p-10 border-2 border-danger/20">
               <div className="text-center space-y-6">
-                 <div className="w-20 h-20 bg-danger/10 text-danger rounded-[2rem] flex items-center justify-center mx-auto shadow-inner group">
-                    <AlertTriangle size={40} className="animate-pulse" />
-                 </div>
-                 
-                 <div className="space-y-3">
-                    <h3 className="text-2xl font-[900] text-foreground tracking-tighter uppercase">XÁC NHẬN XÓA</h3>
-                    <p className="text-sm font-bold text-foreground/50 leading-relaxed uppercase tracking-tight">
-                        {confirmType === 'full' 
-                          ? "Bạn sắp xóa sạch toàn bộ dữ liệu. Mọi thứ sẽ biến mất vĩnh viễn và không thể khôi phục."
-                          : "Hành động này sẽ xóa hết số tiền hiện có và lịch sử giao dịch. Các cài đặt ngân sách sẽ được giữ lại."
-                        }
-                    </p>
-                 </div>
-
+                 <div className="w-20 h-20 bg-danger/10 text-danger rounded-[2rem] flex items-center justify-center mx-auto"><AlertTriangle size={40} /></div>
+                 <h3 className="text-2xl font-[900] text-foreground tracking-tighter uppercase">XÁC NHẬN</h3>
+                 <p className="text-xs font-bold text-foreground/50 uppercase tracking-tight">Hành động này không thể hoàn tác.</p>
                  <div className="flex flex-col gap-3 pt-4">
-                    <button 
-                      onClick={executeReset}
-                      className="w-full py-6 bg-danger text-white rounded-[1.75rem] font-[900] text-[11px] uppercase tracking-[0.3em] shadow-2xl active:scale-95 transition-all"
-                    >
-                        TÔI ĐỒNG Ý XÓA
-                    </button>
-                    <button 
-                      onClick={() => setConfirmType(null)}
-                      className="w-full py-5 text-foreground/40 font-black text-[10px] uppercase tracking-[0.3em] hover:text-foreground transition-all"
-                    >
-                        QUAY LẠI
-                    </button>
+                    <button onClick={executeReset} className="w-full py-6 bg-danger text-white rounded-[1.75rem] font-[900] text-[11px] uppercase tracking-[0.3em]">TÔI ĐỒNG Ý</button>
+                    <button onClick={() => setConfirmType(null)} className="w-full py-5 text-foreground/40 font-black text-[10px] uppercase tracking-[0.3em]">HỦY BỎ</button>
                  </div>
               </div>
            </div>

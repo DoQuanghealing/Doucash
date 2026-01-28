@@ -1,3 +1,4 @@
+
 export const VI = {
   nav: {
     dashboard: "Tổng quan",
@@ -68,6 +69,8 @@ export const VI = {
     walletBackup: "Tên Quỹ dự phòng",
     save: "Lưu cấu hình",
     cancel: "Hủy",
+    export: "Xuất báo cáo (CSV)",
+    exportDesc: "Tải file để mở bằng Google Sheets",
     autoDeduct: {
         title: "Tự động trích quỹ",
         description: "Khi có thu nhập vào Ví chính, tự động chuyển một phần sang Quỹ dự phòng."

@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { TransactionType, Category, Wallet } from '../types';
 import { X, ArrowRight, CheckCircle2, TrendingUp, TrendingDown, ArrowRightLeft, Plus, Wallet as WalletIcon, FileText, MoveRight } from 'lucide-react';
@@ -135,7 +136,7 @@ export const TransactionForm: React.FC<Props> = ({ isOpen, onClose, onSubmit, wa
                 <h2 className="text-2xl font-[1000] text-foreground tracking-tighter uppercase leading-none">
                     {isConfirming ? "XÁC NHẬN" : "GIAO DỊCH MỚI"}
                 </h2>
-                <p className="text-[10px] font-black text-foreground/30 uppercase tracking-[0.3em] mt-2">DuoCash Intelligence</p>
+                <p className="text-[10px] font-black text-foreground/30 uppercase tracking-[0.3em] mt-2">Manicash Intelligence</p>
             </div>
             <button onClick={onClose} className="p-3 bg-foreground/5 rounded-2xl hover:text-primary transition-all">
               <X size={24} />
@@ -365,7 +366,7 @@ export const TransactionForm: React.FC<Props> = ({ isOpen, onClose, onSubmit, wa
 
       {isCatModalOpen && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/90 backdrop-blur-3xl px-6 animate-in zoom-in-95 duration-300">
-           <div className="glass-card w-full max-w-sm rounded-[3rem] p-10 border-0 shadow-2xl bg-surface">
+           <div className="glass-card w-full max-sm rounded-[3rem] p-10 border-0 shadow-2xl bg-surface">
               <div className="text-center mb-8">
                   <div className="w-16 h-16 bg-primary/10 text-primary rounded-[1.5rem] flex items-center justify-center mx-auto mb-4">
                       <Plus size={32} />

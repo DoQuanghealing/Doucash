@@ -1,87 +1,140 @@
-import { GoogleGenerativeAI, SchemaType } from "@google/generative-ai";
-import { Transaction, Budget, User, Goal, IncomeProject, Milestone, FixedCost, FinancialReport, TransactionType } from '../types';
 
-// Ưu tiên dùng import.meta.env cho Vite
-const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-const genAI = new GoogleGenerativeAI(apiKey || "");
+import { GoogleGenAI, Type } from "@google/genai";
+import { Transaction, Budget, User, Goal, IncomeProject, FixedCost, FinancialReport } from '../types';
 
-// Sử dụng model 1.5-flash để tốc độ phản hồi nhanh và ổn định
-const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+// Initialization strictly follows system instructions
+const FLASH_MODEL = 'gemini-3-flash-preview';
+const PRO_MODEL = 'gemini-3-pro-preview';
 
 export const GeminiService = {
-  isAvailable: () => !!apiKey,
+  isAvailable: () => !!process.env.API_KEY,
 
   generateWeeklyInsight: async (transactions: Transaction[], users: User[]): Promise<string> => {
-    if (!apiKey) return "AI Insights unavailable (Missing API Key).";
-
-    const recentTx = transactions.slice(-15);
-    const txString = recentTx.map(t => `${t.date}: ${t.amount} VND on ${t.category} (${t.description})`).join('\n');
-
-    const prompt = `
-      Phân tích các giao dịch gần đây của cặp đôi ${users[0]?.name} và ${users[1]?.name}.
-      Đơn vị tiền tệ: VND.
-      Giao dịch:
-      ${txString}
-
-      Vai trò: Trợ lý phản hồi tài chính trung lập.
-      Giọng điệu: Trưởng thành, điềm tĩnh, hóm hỉnh nhẹ nhàng. 
-      Quy tắc: Tối đa 2 câu. Không đưa lời khuyên. Không dùng emoji. Không dùng dấu chấm than.
-    `;
-
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     try {
-      const result = await model.generateContent(prompt);
-      return result.response.text() || "Đã ghi nhận thói quen chi tiêu.";
+      const recentTx = transactions.slice(-15);
+      const prompt = `Phân tích các giao dịch gần đây của ${users.map(u => u.name).join(' & ')}. Ngôn ngữ: Tiếng Việt. Giọng điệu: Hơi mỉa mai nhưng thực tế. Tối đa 2 câu.`;
+      const response = await ai.models.generateContent({ 
+        model: FLASH_MODEL, 
+        contents: prompt 
+      });
+      return response.text || "Đã ghi nhận thói quen chi tiêu.";
     } catch (e) {
-      console.error(e);
       return "AI đang quan sát trong im lặng.";
     }
   },
 
-  generateBadge: async (transactions: Transaction[]): Promise<{title: string, description: string}> => {
-    if (!apiKey) return { title: 'Tập sự', description: 'Bắt đầu theo dõi.' };
-
-    const prompt = `Dựa trên giao dịch này: ${JSON.stringify(transactions.slice(-10))}. Tạo 1 danh hiệu hài hước (badge) bằng tiếng Việt. Trả về JSON format: {"title": "...", "description": "..."}`;
-
+  generateReflectionPrompt: async (overspentCategory: string, amountOver: number): Promise<string> => {
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     try {
-      const result = await model.generateContent({
-        contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        generationConfig: {
-          responseMimeType: "application/json",
-        }
+      const prompt = `Người dùng đã chi quá tay ${amountOver} VND trong danh mục ${overspentCategory}. Viết 1 câu phản tư ngắn gọn, mỉa mai bằng tiếng Việt.`;
+      const response = await ai.models.generateContent({ 
+        model: FLASH_MODEL, 
+        contents: prompt 
       });
-      return JSON.parse(result.response.text());
+      return response.text || "Đó là lựa chọn của bạn.";
     } catch (e) {
-      return { title: 'Người bí ẩn', description: 'Tiền đi đâu không ai biết.' };
+      return "Đó là lựa chọn của bạn.";
     }
   },
 
-  generateComprehensiveReport: async (
-    transactions: Transaction[], 
-    goals: Goal[], 
-    projects: IncomeProject[], 
-    fixedCosts: FixedCost[]
-  ): Promise<FinancialReport | null> => {
-    if (!apiKey) return null;
-
-    const summary = {
-      income: transactions.filter(t => t.type === TransactionType.INCOME).reduce((sum, t) => sum + t.amount, 0),
-      goals: goals.map(g => ({ name: g.name, current: g.currentAmount, target: g.targetAmount })),
-      projects: projects.length
-    };
-
-    const prompt = `Hãy phân tích dữ liệu tài chính sau và trả về báo cáo chi tiết dạng JSON tiếng Việt: ${JSON.stringify(summary)}`;
-
+  generateTransactionComment: async (transaction: any): Promise<string> => {
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     try {
-      const result = await model.generateContent({
-        contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        generationConfig: {
-          responseMimeType: "application/json",
-        }
+      const prompt = `Viết 1 câu mỉa mai ngắn bằng tiếng Việt về việc chi ${transaction.amount} cho ${transaction.category}.`;
+      const response = await ai.models.generateContent({ 
+        model: FLASH_MODEL, 
+        contents: prompt 
       });
-      return JSON.parse(result.response.text());
-    } catch (e) {
-      console.error("Report Error:", e);
-      return null;
-    }
+      return response.text || "";
+    } catch (e) { return ""; }
+  },
+
+  generateBadge: async (transactions: Transaction[]): Promise<{title: string, description: string}> => {
+     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+     try {
+        const response = await ai.models.generateContent({
+            model: FLASH_MODEL,
+            contents: "Tạo một huy hiệu thành tích mỉa mai cho các giao dịch này. Trả về JSON {title, description}",
+            config: { 
+                responseMimeType: 'application/json',
+                responseSchema: {
+                    type: Type.OBJECT,
+                    properties: { title: { type: Type.STRING }, description: { type: Type.STRING } },
+                    required: ['title', 'description']
+                }
+            }
+        });
+        return JSON.parse(response.text || '{}');
+      } catch (e) {
+        return { title: 'Người bí ẩn', description: 'Tiền đi đâu không ai biết.' };
+      }
+  },
+
+  generateIncomePlan: async (idea: string): Promise<any> => {
+      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      try {
+          const response = await ai.models.generateContent({
+              model: PRO_MODEL,
+              contents: `Lập kế hoạch thu nhập cho ý tưởng: "${idea}". Đơn vị: VND. Tiếng Việt. Trả về JSON.`,
+              config: { 
+                  responseMimeType: 'application/json',
+                  responseSchema: {
+                      type: Type.OBJECT,
+                      properties: {
+                          name: { type: Type.STRING },
+                          description: { type: Type.STRING },
+                          expectedIncome: { type: Type.NUMBER },
+                          milestones: {
+                              type: Type.ARRAY,
+                              items: {
+                                  type: Type.OBJECT,
+                                  properties: { title: { type: Type.STRING }, daysFromNow: { type: Type.NUMBER } },
+                                  required: ['title', 'daysFromNow']
+                              }
+                          }
+                      },
+                      required: ['name', 'description', 'expectedIncome', 'milestones']
+                  }
+              }
+          });
+          return JSON.parse(response.text || '{}');
+      } catch (e) { return null; }
+  },
+
+  generateComprehensiveReport: async (transactions: Transaction[], goals: Goal[], projects: IncomeProject[], fixedCosts: FixedCost[]): Promise<FinancialReport | null> => {
+      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      try {
+          const response = await ai.models.generateContent({
+              model: PRO_MODEL,
+              contents: "Phân tích sức khỏe tài chính dựa trên dữ liệu giao dịch, mục tiêu và hóa đơn. Trả về JSON chi tiết.",
+              config: { 
+                  responseMimeType: 'application/json',
+                  responseSchema: {
+                      type: Type.OBJECT,
+                      properties: {
+                          healthScore: { type: Type.NUMBER },
+                          incomeTrend: {
+                              type: Type.OBJECT,
+                              properties: { status: { type: Type.STRING }, percentage: { type: Type.NUMBER }, message: { type: Type.STRING } },
+                              required: ['status', 'percentage', 'message']
+                          },
+                          projectVelocity: {
+                              type: Type.OBJECT,
+                              properties: { rating: { type: Type.STRING }, completedProjects: { type: Type.NUMBER }, message: { type: Type.STRING } },
+                              required: ['rating', 'completedProjects', 'message']
+                          },
+                          goalForecast: {
+                              type: Type.OBJECT,
+                              properties: { canMeetFixedCosts: { type: Type.BOOLEAN }, majorGoalPrediction: { type: Type.STRING }, advice: { type: Type.STRING } },
+                              required: ['canMeetFixedCosts', 'majorGoalPrediction', 'advice']
+                          }
+                      },
+                      required: ['healthScore', 'incomeTrend', 'projectVelocity', 'goalForecast']
+                  }
+              }
+          });
+          return JSON.parse(response.text || '{}');
+      } catch (e) { return null; }
   }
 };
