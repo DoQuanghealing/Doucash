@@ -359,7 +359,7 @@ export const Dashboard: React.FC<Props> = ({ wallets = [], transactions = [], us
                               </div>
                               <div className="text-center space-y-3">
                                   <p className="text-lg font-[900] text-foreground uppercase tracking-tight">AI ĐANG QUÉT DỮ LIỆU...</p>
-                                  <p className="text-[10px] font-black text-foreground/30 uppercase tracking-widest max-w-[200px] leading-relaxed">Đang phân tích thói quen tiêu tiền vô tri của bạn</p>
+                                  <p className="text-[10px] font-black text-foreground/30 uppercase tracking-[0.2em] max-w-[200px] leading-relaxed">Đang phân tích thói quen tiêu tiền vô tri của bạn</p>
                               </div>
                           </div>
                       ) : prosperityData ? (
