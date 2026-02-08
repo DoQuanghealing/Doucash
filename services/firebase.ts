@@ -1,111 +1,64 @@
-
 import { initializeApp, getApp, getApps } from "firebase/app";
-import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "firebase/auth";
+import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged, User } from "firebase/auth";
 
 const firebaseConfig = {
-  apiKey: "YOUR_FIREBASE_API_KEY",
-  authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_PROJECT_ID.appspot.com",
-  messagingSenderId: "YOUR_SENDER_ID",
-  appId: "YOUR_APP_ID"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID
 };
 
+// Khởi tạo Firebase an toàn
 let auth: any = null;
-let isConfigured = false;
-
-try {
-  if (firebaseConfig.apiKey && firebaseConfig.apiKey !== "YOUR_FIREBASE_API_KEY") {
-    const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
-    auth = getAuth(app);
-    isConfigured = true;
-  }
-} catch (error) {
-  console.error("[Firebase Init] Lỗi cấu hình:", error);
+if (firebaseConfig.apiKey && getApps().length === 0) {
+  const app = initializeApp(firebaseConfig);
+  auth = getAuth(app);
+} else if (getApps().length > 0) {
+  auth = getAuth(getApp());
 }
 
 const provider = new GoogleAuthProvider();
 provider.setCustomParameters({ prompt: 'select_account' });
 
-let authChangeCallback: ((user: any) => void) | null = null;
-
 export const AuthService = {
-  isConfigured: () => isConfigured,
-
-  checkPreConditions: () => {
-    console.log("[Auth] Kiểm tra điều kiện trước đăng nhập...");
-    if (!navigator.onLine) {
-      throw new Error("NETWORK_ERROR: Không có kết nối mạng. Vui lòng kiểm tra lại Wifi/4G.");
-    }
-    return true;
-  },
+  isConfigured: () => !!auth,
 
   loginWithGoogle: async () => {
-    console.log("[Auth] Bắt đầu quy trình đăng nhập Google...");
+    if (!auth) throw new Error("Firebase chưa được cấu hình API Key.");
     
-    if (!auth) {
-      console.warn("[Auth] Firebase chưa được cấu hình.");
-      throw new Error("CONFIGURATION_ERROR: Firebase chưa được cấu hình.");
-    }
+    // Kiểm tra mạng trước khi mở popup để tránh treo
+    if (!navigator.onLine) throw new Error("Không có kết nối internet.");
 
-    AuthService.checkPreConditions();
-
-    const timeoutPromise = new Promise((_, reject) => {
-      setTimeout(() => reject(new Error("TIMEOUT: Quá trình đăng nhập mất quá nhiều thời gian (20s).")), 20000);
-    });
+    const timeout = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error("TIMEOUT")), 20000)
+    );
 
     try {
-      console.log("[Auth] Đang mở Popup Google...");
       const loginPromise = signInWithPopup(auth, provider);
-      const result: any = await Promise.race([loginPromise, timeoutPromise]);
-      
-      console.log("[Auth] Lấy Token thành công:", result.user.uid);
+      const result: any = await Promise.race([loginPromise, timeout]);
       return result.user;
     } catch (error: any) {
-      console.error("[Auth] Lỗi chi tiết:", error.code, error.message);
-      
-      if (error.code === 'auth/popup-closed-by-user') {
-        throw new Error("SIGN_IN_CANCELLED: Bạn đã đóng cửa sổ đăng nhập.");
-      } else if (error.code === 'auth/network-request-failed') {
-        throw new Error("NETWORK_ERROR: Lỗi kết nối mạng khi xác thực.");
-      } else if (error.code === 'auth/cancelled-popup-request') {
-        throw new Error("DEVELOPER_ERROR: Quá nhiều yêu cầu popup cùng lúc.");
-      } else if (error.message?.includes("TIMEOUT")) {
-        throw new Error("TIMEOUT: Phản hồi từ Google quá chậm, vui lòng thử lại.");
-      }
-      
+      if (error.message === "TIMEOUT") throw new Error("Phản hồi quá chậm, vui lòng thử lại.");
+      if (error.code === 'auth/popup-closed-by-user') throw new Error("Bạn đã hủy đăng nhập.");
       throw error;
     }
   },
 
   logout: async () => {
-    console.log("[Auth] Đang đăng xuất...");
-    
     if (auth) {
-      try {
-        await signOut(auth);
-      } catch (e) {
-        console.error("[Auth] Lỗi khi đăng xuất Firebase:", e);
-      }
+      await signOut(auth);
+      // Thay vì reload trang, hãy để onAuthChange xử lý UI
     }
-
-    if (authChangeCallback) {
-        authChangeCallback(null);
-    }
-
-    window.location.href = window.location.origin + window.location.pathname;
   },
 
-  onAuthChange: (callback: (user: any) => void) => {
-    authChangeCallback = callback;
-    
+  onAuthChange: (callback: (user: User | null) => void) => {
     if (!auth) {
-      setTimeout(() => callback(null), 10);
-      return () => { authChangeCallback = null; };
+      callback(null);
+      return () => {};
     }
-    
-    return onAuthStateChanged(auth, (user) => {
-      callback(user);
-    });
+    // Trả về hàm unsubscribe để React useEffect dọn dẹp
+    return onAuthStateChanged(auth, callback);
   }
 };
