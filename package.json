@@ -1,19 +1,29 @@
-
 {
-  "name": "duocash-future-finance",
+  "name": "manicash-finance",
   "version": "1.0.0",
   "description": "Mobile-first personal finance app for couples with AI insights.",
-  "main": "index.tsx",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "lint": "eslint ."
+  },
   "dependencies": {
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
     "lucide-react": "^0.562.0",
-    "@google/genai": "^1.37.0",
-    "firebase": "^11.3.1"
+    "firebase": "^11.3.1",
+    "groq-sdk": "^0.9.0",
+    "@google/generative-ai": "^0.21.0"
   },
   "devDependencies": {
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
-    "typescript": "^5.0.0"
+    "@vitejs/plugin-react": "^4.3.0",
+    "typescript": "^5.0.0",
+    "vite": "^5.4.0",
+    "eslint": "^9.0.0",
+    "path": "^0.12.7"
   }
 }
