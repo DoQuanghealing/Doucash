@@ -6,7 +6,7 @@ import { X, ShieldCheck, Wallet as WalletIcon, Trash2, AlertTriangle, Banknote, 
 import { StorageService } from '../services/storageService';
 import { AuthService } from '../services/firebase';
 import { formatNumberInput, parseNumberInput } from '../utils/format';
-import { GeminiService } from '../services/aiService';
+// Fix: Removed incorrect import of GeminiService which is not exported by aiService
 import { BUTLER_PROMPTS } from '../constants';
 
 interface Props {

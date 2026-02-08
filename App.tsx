@@ -10,7 +10,7 @@ import { ReflectionModal } from './components/ReflectionModal';
 import { SettingsModal } from './components/SettingsModal';
 import { Login } from './components/Login';
 import { StorageService } from './services/storageService';
-import { GeminiService } from './services/aiService';
+import { AiService } from './services/aiService';
 import { AuthService } from './services/firebase';
 import { BrandLogo } from './components/BrandLogo';
 import { Transaction, Wallet, Goal, Category, TransactionType, User as AppUser, Budget, FixedCost, ButlerType } from './types';
@@ -137,7 +137,6 @@ function App() {
             ? (user.femaleButlerName || "Queen Crown") 
             : (user.maleButlerName || "Lord Diamond");
 
-        // Hiện modal ngay lập tức với thông điệp chờ để tăng cảm giác phản hồi nhanh
         setReflectionData({
             isOpen: true,
             message: "Đang phân tích thói quen của Người...",
@@ -153,7 +152,7 @@ function App() {
             
             if (budget && currentSpent > budget.limit) {
                 const overage = currentSpent - budget.limit;
-                const message = await GeminiService.generateReflectionPrompt(data.category, overage);
+                const message = await AiService.generateReflectionPrompt(data.category, overage);
                 setReflectionData({ 
                     isOpen: true, 
                     message, 
@@ -163,7 +162,7 @@ function App() {
                     isLoading: false
                 });
             } else {
-                const comment = await GeminiService.generateTransactionComment(data);
+                const comment = await AiService.generateTransactionComment(data);
                 if (comment) {
                     setReflectionData({ 
                         isOpen: true, 
@@ -174,7 +173,6 @@ function App() {
                         isLoading: false
                     });
                 } else {
-                    // Nếu lỗi AI, đóng modal hoặc hiện mặc định
                     setReflectionData(prev => ({ ...prev, isOpen: false }));
                 }
             }

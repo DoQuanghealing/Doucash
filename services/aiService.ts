@@ -55,7 +55,7 @@ const callGroq = async (prompt: string, system: string, isPro: boolean = false, 
     }
 };
 
-export const GeminiService = {
+export const AiService = {
   isAvailable: () => !!process.env.API_KEY,
 
   generateTransactionComment: async (transaction: any): Promise<string> => {

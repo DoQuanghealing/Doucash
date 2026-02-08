@@ -7,7 +7,7 @@ import { VI } from '../constants/vi';
 import { formatVND } from '../utils/format';
 import { CalendarView } from './CalendarView';
 import { StorageService } from '../services/storageService';
-import { GeminiService } from '../services/aiService';
+import { AiService } from '../services/aiService';
 
 interface Props {
   wallets: Wallet[];
@@ -123,7 +123,7 @@ export const Dashboard: React.FC<Props> = ({ wallets = [], transactions = [], us
           const costs = StorageService.getFixedCosts();
           const projects = StorageService.getIncomeProjects();
           const goals = StorageService.getGoals();
-          const result = await GeminiService.generateProsperityPlan(transactions, costs, projects, goals);
+          const result = await AiService.generateProsperityPlan(transactions, costs, projects, goals);
           setProsperityData(result);
           setIsLoadingProsperity(false);
       }
@@ -260,17 +260,15 @@ export const Dashboard: React.FC<Props> = ({ wallets = [], transactions = [], us
           <div className="glass-card liquid-glass p-7 rounded-[2.5rem] border-0 shadow-xl bg-gradient-to-br from-surface/50 to-background flex flex-col gap-6 relative overflow-hidden group">
               <div className="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-full blur-3xl group-hover:bg-primary/10 transition-colors"></div>
               
-              <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 bg-primary/10 text-primary rounded-2xl flex items-center justify-center shadow-inner">
-                          <HeartPulse size={24} />
-                      </div>
-                      <div>
-                          <h3 className="text-[10px] font-black text-foreground/40 uppercase tracking-[0.2em] mb-1">ĐÁNH GIÁ SỨC KHỎE</h3>
-                          <p className="text-sm font-[900] text-foreground uppercase tracking-tight">Ổn định & Kỳ vọng</p>
-                      </div>
+              <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 bg-primary/10 text-primary rounded-2xl flex items-center justify-center shadow-inner">
+                      <HeartPulse size={24} />
                   </div>
-                  <div className="w-12 h-12 rounded-full border-4 border-primary/20 flex items-center justify-center relative">
+                  <div>
+                      <h3 className="text-[10px] font-black text-foreground/40 uppercase tracking-[0.2em] mb-1">ĐÁNH GIÁ SỨC KHỎE</h3>
+                      <p className="text-sm font-[900] text-foreground uppercase tracking-tight">Ổn định & Kỳ vọng</p>
+                  </div>
+                  <div className="ml-auto w-12 h-12 rounded-full border-4 border-primary/20 flex items-center justify-center relative">
                       <div className="absolute inset-0 border-4 border-primary rounded-full animate-pulse opacity-20"></div>
                       <span className="text-[12px] font-black text-primary">85</span>
                   </div>
@@ -359,7 +357,7 @@ export const Dashboard: React.FC<Props> = ({ wallets = [], transactions = [], us
                               </div>
                               <div className="text-center space-y-3">
                                   <p className="text-lg font-[900] text-foreground uppercase tracking-tight">AI ĐANG QUÉT DỮ LIỆU...</p>
-                                  <p className="text-[10px] font-black text-foreground/30 uppercase tracking-[0.2em] max-w-[200px] leading-relaxed">Đang phân tích thói quen tiêu tiền vô tri của bạn</p>
+                                  <p className="text-[10px] font-black text-foreground/30 uppercase tracking-[0.2em] max-w-[200px] leading-relaxed text-center mx-auto">Đang phân tích thói quen tiêu tiền vô tri của bạn</p>
                               </div>
                           </div>
                       ) : prosperityData ? (
@@ -444,7 +442,7 @@ export const Dashboard: React.FC<Props> = ({ wallets = [], transactions = [], us
                           onChange={(e) => setTransferAmount(e.target.value)}
                         />
                       </div>
-                      <button type="submit" className="w-full bg-primary text-white py-6 rounded-[2rem] font-[1000] text-[11px] uppercase tracking-[0.3em] shadow-2xl active:scale-95 transition-all">XÁC NHẬN CHUYỂN</button>
+                      <button type="submit" className="w-full bg-primary text-white py-6 rounded-[2rem] font-[1000] text-[11px] uppercase tracking-[0.4em] shadow-2xl active:scale-95 transition-all">XÁC NHẬN CHUYỂN</button>
                   </form>
               </div>
           </div>

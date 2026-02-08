@@ -1,7 +1,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { Transaction, User, IncomeProject, Milestone, Category, TransactionType, FinancialReport, Budget, Wallet, FixedCost, Goal } from '../types';
-import { GeminiService } from '../services/aiService';
+import { AiService } from '../services/aiService';
 import { StorageService } from '../services/storageService';
 import { VI } from '../constants/vi';
 import { formatVND, formatNumberInput, parseNumberInput } from '../utils/format';
@@ -48,7 +48,7 @@ export const Insights: React.FC<Props> = ({ transactions, users }) => {
 
   const handleGenerateReport = async () => {
       setIsReportLoading(true);
-      const result = await GeminiService.generateComprehensiveReport(
+      const result = await AiService.generateComprehensiveReport(
         transactions, 
         StorageService.getGoals(), 
         projects, 
@@ -72,7 +72,6 @@ export const Insights: React.FC<Props> = ({ transactions, users }) => {
     ps[pIdx].milestones[mIdx].isCompleted = !ps[pIdx].milestones[mIdx].isCompleted;
     ps[pIdx].status = calculateStatus(ps[pIdx]);
     
-    // Nếu hoàn thành toàn bộ checklist
     if (ps[pIdx].milestones.length > 0 && ps[pIdx].milestones.every(m => m.isCompleted)) {
         const randomQuote = CELEBRATION_QUOTES[Math.floor(Math.random() * CELEBRATION_QUOTES.length)];
         setCurrentQuote(randomQuote);
@@ -86,7 +85,6 @@ export const Insights: React.FC<Props> = ({ transactions, users }) => {
   const handleCollectIncome = () => {
     if (!celebratingProject) return;
 
-    // 1. Tạo giao dịch thu nhập
     const tx: Transaction = {
         id: `tx_inc_proj_${Date.now()}`,
         date: new Date().toISOString(),
@@ -99,7 +97,6 @@ export const Insights: React.FC<Props> = ({ transactions, users }) => {
     };
     StorageService.addTransaction(tx);
 
-    // 2. Chốt trạng thái dự án
     const updatedProj = { ...celebratingProject, status: 'completed' as const };
     StorageService.updateIncomeProject(updatedProj);
     
@@ -176,7 +173,7 @@ export const Insights: React.FC<Props> = ({ transactions, users }) => {
   const handleGeneratePlan = async () => {
       if (!aiPrompt) return;
       setIsGenerating(true);
-      const plan = await GeminiService.generateIncomePlan(aiPrompt);
+      const plan = await AiService.generateIncomePlan(aiPrompt);
       setIsGenerating(false);
       if (plan) {
           setIsAiModalOpen(false);
@@ -324,7 +321,6 @@ export const Insights: React.FC<Props> = ({ transactions, users }) => {
       </div>
       {activeTab === 'planning' ? renderPlanningTab() : renderReportTab()}
 
-      {/* MODAL CHÚC MỪNG HOÀN THÀNH DỰ ÁN */}
       {celebratingProject && (
           <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/95 backdrop-blur-3xl p-6 animate-in fade-in duration-500">
               <div className="absolute inset-0 overflow-hidden pointer-events-none">
@@ -339,7 +335,6 @@ export const Insights: React.FC<Props> = ({ transactions, users }) => {
                   <div className="absolute top-0 left-0 w-full h-3 bg-gradient-to-r from-primary via-secondary to-primary shadow-[0_0_20px_rgba(139,92,246,0.5)]"></div>
                   
                   <div className="relative z-10 space-y-10">
-                      {/* 3 Icons trang trí sinh động theo yêu cầu */}
                       <div className="flex justify-center items-end gap-3 h-32 relative">
                           <div className="w-14 h-14 bg-primary/10 text-primary rounded-2xl flex items-center justify-center shadow-lg transform -rotate-12 animate-bounce">
                               <Trophy size={28} />
@@ -358,7 +353,6 @@ export const Insights: React.FC<Props> = ({ transactions, users }) => {
                           </div>
                           <h4 className="text-3xl font-[1000] text-foreground tracking-tighter uppercase leading-tight drop-shadow-sm">{celebratingProject.name}</h4>
                           <div className="px-4">
-                             {/* Câu chúc mừng khích lệ luân phiên */}
                              <p className="font-comic text-xl text-foreground font-bold leading-relaxed italic opacity-90">"{currentQuote}"</p>
                           </div>
                       </div>
@@ -392,7 +386,6 @@ export const Insights: React.FC<Props> = ({ transactions, users }) => {
           </div>
       )}
 
-      {/* MODAL AI */}
       {isAiModalOpen && (
           <div className="fixed inset-0 z-[500] flex items-center justify-center bg-black/90 backdrop-blur-3xl px-6">
               <div className="glass-card w-full max-w-[340px] sm:max-w-md rounded-[3rem] p-10 border-0 shadow-2xl animate-in zoom-in-95 bg-surface relative overflow-hidden">
@@ -418,7 +411,6 @@ export const Insights: React.FC<Props> = ({ transactions, users }) => {
           </div>
       )}
 
-      {/* EDIT MODAL */}
       {isEditOpen && (
           <div className="fixed inset-0 z-[500] flex items-center justify-center bg-black/80 backdrop-blur-3xl p-4 sm:p-6 overflow-hidden">
               <div className="glass-card w-full max-w-md h-[92vh] flex flex-col rounded-[3.5rem] shadow-2xl border-0 bg-surface overflow-hidden relative">
@@ -449,7 +441,6 @@ export const Insights: React.FC<Props> = ({ transactions, users }) => {
                           </div>
                       </div>
 
-                      {/* Milestone list */}
                       <div className="space-y-4 pt-4 border-t border-foreground/5">
                         <div className="flex justify-between items-center">
                             <h4 className="text-[10px] font-black text-foreground/40 uppercase tracking-[0.2em]">CÁC BƯỚC THỰC HIỆN</h4>
@@ -504,7 +495,6 @@ export const Insights: React.FC<Props> = ({ transactions, users }) => {
                       </div>
                   </div>
 
-                  {/* BOTTOM TOOLBAR */}
                   <div className="absolute bottom-[160px] left-0 right-0 px-8 z-[60] flex gap-4 pointer-events-none">
                       {editingProject.id && (
                         <button onClick={() => handleDelete(editingProject.id)} className="w-16 h-16 bg-danger/20 text-danger rounded-2xl flex items-center justify-center shadow-xl border border-danger/20 pointer-events-auto active:scale-95 transition-all">
