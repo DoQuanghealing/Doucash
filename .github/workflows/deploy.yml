@@ -3,7 +3,7 @@ name: Deploy Manicash to Vercel
 on:
   push:
     branches:
-      - main # Tự động kích hoạt khi có code mới đẩy lên nhánh chính
+      - main # Tự động kích hoạt khi có code mới đẩy lên
 
 jobs:
   deploy:
@@ -15,15 +15,14 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v3
         with:
-          node-version: '20' # Sử dụng Node 20 để tránh các cảnh báo lỗi phiên bản
+          node-version: '20' # Đã nâng cấp lên bản 20 để xóa đống warn EBADENGINE
 
       - name: Install Dependencies
         run: npm install
 
       - name: Build Project
-        run: npm run build # Chạy lệnh đóng gói đã cấu hình trong package.json
+        run: npm run build # Sử dụng script build đã thêm vào package.json
         env:
-          # Truyền toàn bộ các Key bí mật từ GitHub sang Vercel
           VITE_FIREBASE_API_KEY: ${{ secrets.VITE_FIREBASE_API_KEY }}
           VITE_FIREBASE_AUTH_DOMAIN: ${{ secrets.VITE_FIREBASE_AUTH_DOMAIN }}
           VITE_FIREBASE_PROJECT_ID: ${{ secrets.VITE_FIREBASE_PROJECT_ID }}
@@ -34,10 +33,10 @@ jobs:
           VITE_GROQ_API_KEY: ${{ secrets.VITE_GROQ_API_KEY }}
 
       - name: Deploy to Vercel
-        uses: amondnet/vercel-action@v25 # Sử dụng bản Action mới nhất để xóa bỏ cảnh báo vàng
+        uses: amondnet/vercel-action@v25 # Sử dụng bản v25 để hết lỗi set-output
         with:
           vercel-token: ${{ secrets.VERCEL_TOKEN }}
           vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
           vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
-          # THÊM --yes ĐỂ VERCEL TỰ XÁC NHẬN MỌI CÂU HỎI TRONG 1 GIÂY
-          vercel-args: '--prod --yes'
+          # QUAN TRỌNG: Chỉ dùng --prod, Action v25 sẽ tự động xử lý việc xác nhận (--yes) ngầm cho Cậu chủ
+          vercel-args: '--prod'
