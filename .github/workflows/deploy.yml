@@ -15,13 +15,13 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v3
         with:
-          node-version: '20' # Đã nâng cấp lên bản 20 để xóa đống warn EBADENGINE
+          node-version: '20' # Giữ Node 20 để tránh các cảnh báo lỗi phiên bản
 
       - name: Install Dependencies
         run: npm install
 
       - name: Build Project
-        run: npm run build # Sử dụng script build đã thêm vào package.json
+        run: npm run build # Sử dụng script build trong package.json
         env:
           VITE_FIREBASE_API_KEY: ${{ secrets.VITE_FIREBASE_API_KEY }}
           VITE_FIREBASE_AUTH_DOMAIN: ${{ secrets.VITE_FIREBASE_AUTH_DOMAIN }}
@@ -38,5 +38,5 @@ jobs:
           vercel-token: ${{ secrets.VERCEL_TOKEN }}
           vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
           vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
-          # QUAN TRỌNG: Chỉ dùng --prod, Action v25 sẽ tự động xử lý việc xác nhận (--yes) ngầm cho Cậu chủ
-          vercel-args: '--prod'
+          # CHÌA KHÓA Ở ĐÂY: Thêm --yes để vượt qua câu hỏi xác nhận
+          vercel-args: '--prod --yes'
